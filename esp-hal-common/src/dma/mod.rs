@@ -164,8 +164,8 @@ impl DmaLinkedListDw0 for &mut u32 {
     }
 }
 
-/// Crate private implementatin details
-pub(crate) mod private {
+/// Crate private implementation details
+pub mod private {
     use super::*;
 
     pub trait PeripheralMarker {}

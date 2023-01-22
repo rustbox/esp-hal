@@ -334,8 +334,8 @@ macro_rules! impl_channel {
     };
 }
 
-/// Crate private implementatin details
-pub(crate) mod private {
+/// Crate private implementation details
+pub mod private {
     use crate::dma::{private::*, *};
 
     impl_channel!(0);

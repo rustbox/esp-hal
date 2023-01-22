@@ -204,6 +204,57 @@ where
         Self::new_internal(spi, frequency, mode, peripheral_clock_control, clocks)
     }
 
+    pub fn new_quad_send_only<SCK: OutputPin, SIO0: OutputPin, SIO1: OutputPin, SIO2: OutputPin, SIO3: OutputPin, CS: OutputPin>(
+        spi: impl Peripheral<P = T> + 'd,
+        sck: impl Peripheral<P = SCK> + 'd,
+        sio0: impl Peripheral<P = SIO0> + 'd,
+        sio1: impl Peripheral<P = SIO1> + 'd,
+        sio2: impl Peripheral<P = SIO2> + 'd,
+        sio3: impl Peripheral<P = SIO3> + 'd,
+        cs: impl Peripheral<P = CS> + 'd,
+        frequency: HertzU32,
+        mode: SpiMode,
+        peripheral_clock_control: &mut PeripheralClockControl,
+        clocks: &Clocks,
+    ) -> Self {
+        crate::into_ref!(spi, sck, sio0, sio1, sio2, sio3, cs);
+
+        sck.set_to_push_pull_output()
+            .connect_peripheral_to_output(spi.sclk_signal());
+
+        #[cfg(any(esp32c2, esp32c3))]
+        {
+            sio0.set_to_push_pull_output()
+                .connect_peripheral_to_output(OutputSignal::FSPID);
+
+            sio1.set_to_push_pull_output()
+                .connect_peripheral_to_output(OutputSignal::FSPIQ);
+
+            sio2.set_to_push_pull_output()
+                .connect_peripheral_to_output(OutputSignal::FSPIWP);
+
+            sio3.set_to_push_pull_output()
+                .connect_peripheral_to_output(OutputSignal::FSPIHD);
+        }
+            
+        cs.set_to_push_pull_output()
+            .connect_peripheral_to_output(spi.cs_signal());
+           
+        let internal = Self::new_internal(spi, frequency, mode, peripheral_clock_control, clocks);
+        let reg_block = internal.spi.register_block();
+        reg_block.user.modify(|_, w| {
+            w.doutdin()
+                .clear_bit()
+                .usr_miso()
+                .clear_bit()
+                .fwrite_quad()
+                .set_bit()
+        });
+        reg_block.ctrl.write(|w| w.wr_bit_order().set_bit());
+        
+        internal
+    }
+
     pub(crate) fn new_internal(
         spi: PeripheralRef<'d, T>,
         frequency: HertzU32,
@@ -1150,6 +1201,19 @@ where
 {
 }
 
+///
+/// Generates the SPI Clock register value given the PRE and N
+/// input values
+///
+fn clock_register(pre: u32, n: u32) -> u32 {
+    let l = n;
+    let h = ((n + 1) / 2).saturating_sub(1);
+
+    let reg_value = l | h << 6 | n << 12 | pre << 18;
+
+    return reg_value;
+}
+
 pub trait Instance {
     fn register_block(&self) -> &RegisterBlock;
 
@@ -1170,7 +1234,7 @@ pub trait Instance {
         reg_block.user.modify(|_, w| {
             w.usr_miso_highpart()
                 .clear_bit()
-                .usr_miso_highpart()
+                .usr_mosi_highpart()
                 .clear_bit()
                 .doutdin()
                 .set_bit()
@@ -1208,80 +1272,34 @@ pub trait Instance {
 
     // taken from https://github.com/apache/incubator-nuttx/blob/8267a7618629838231256edfa666e44b5313348e/arch/risc-v/src/esp32c3/esp32c3_spi.c#L496
     fn setup(&mut self, frequency: HertzU32, clocks: &Clocks) {
+        let frequency = frequency.raw();
         // FIXME: this might not be always true
-        let apb_clk_freq: HertzU32 = HertzU32::Hz(clocks.apb_clock.to_Hz());
+        let apb_clk_freq: u32 = clocks.apb_clock.to_Hz();
+        // println!("apb clock freq is {} MHz", apb_clk_freq / 1_000_000);
 
         let reg_val: u32;
-        let duty_cycle = 128;
 
-        // In HW, n, h and l fields range from 1 to 64, pre ranges from 1 to 8K.
-        // The value written to register is one lower than the used value.
-
-        if frequency > ((apb_clk_freq / 4) * 3) {
+        if frequency > (apb_clk_freq / 2) {
             // Using APB frequency directly will give us the best result here.
             reg_val = 1 << 31;
+            // println!("Using apb clock");
         } else {
-            /* For best duty cycle resolution, we want n to be as close to 32 as
-             * possible, but we also need a pre/n combo that gets us as close as
-             * possible to the intended frequency. To do this, we bruteforce n and
-             * calculate the best pre to go along with that. If there's a choice
-             * between pre/n combos that give the same result, use the one with the
-             * higher n.
-             */
+            let mut best_n = 1;
+            let mut best_pre = 0;
+            // This is at least 2, frequency must be less than apb_clock_freq
+            let f_ratio = apb_clk_freq / frequency;
+            for n in 1..64 {
+                best_n = n;
+                best_pre = f_ratio / (n + 1) - 1;
 
-            let mut pre: i32;
-            let mut bestn: i32 = -1;
-            let mut bestpre: i32 = -1;
-            let mut besterr: i32 = 0;
-            let mut errval: i32;
-
-            /* Start at n = 2. We need to be able to set h/l so we have at least
-             * one high and one low pulse.
-             */
-
-            for n in 2..64 {
-                /* Effectively, this does:
-                 *   pre = round((APB_CLK_FREQ / n) / frequency)
-                 */
-
-                pre = ((apb_clk_freq.raw() as i32 / n) + (frequency.raw() as i32 / 2))
-                    / frequency.raw() as i32;
-
-                if pre <= 0 {
-                    pre = 1;
-                }
-
-                if pre > 16 {
-                    pre = 16;
-                }
-
-                errval = (apb_clk_freq.raw() as i32 / (pre as i32 * n as i32)
-                    - frequency.raw() as i32)
-                    .abs();
-                if bestn == -1 || errval <= besterr {
-                    besterr = errval;
-                    bestn = n as i32;
-                    bestpre = pre as i32;
+                // pre is 4 bits
+                if best_pre < 16 {
+                    break;
                 }
             }
-
-            let n: i32 = bestn;
-            pre = bestpre as i32;
-            let l: i32 = n;
-
-            /* Effectively, this does:
-             *   h = round((duty_cycle * n) / 256)
-             */
-
-            let mut h: i32 = (duty_cycle * n + 127) / 256;
-            if h <= 0 {
-                h = 1;
-            }
-
-            reg_val = (l as u32 - 1)
-                | ((h as u32 - 1) << 6)
-                | ((n as u32 - 1) << 12)
-                | ((pre as u32 - 1) << 18);
+            let _f = apb_clk_freq / ((best_pre + 1) * (best_n + 1));
+            // println!("using spi clock at {} MHz", f / 1_000_000);
+            reg_val = clock_register(best_pre, best_n)
         }
 
         self.register_block()
