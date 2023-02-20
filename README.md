@@ -15,12 +15,10 @@ If you have any questions, comments, or concerns, please [open an issue], [start
 |     Crate     |                               Target                                | Technical Reference Manual |
 | :-----------: | :-----------------------------------------------------------------: | :------------------------: |
 |  [esp32-hal]  |                       `xtensa-esp32-none-elf`                       |          [ESP32]           |
-| [esp32c2-hal] | `riscv32imc-unknown-none-elf`<br />`riscv32imac-unknown-none-elf`\* |         [ESP32-C2]         |
-| [esp32c3-hal] | `riscv32imc-unknown-none-elf`<br />`riscv32imac-unknown-none-elf`\* |         [ESP32-C3]         |
+| [esp32c2-hal] |                    `riscv32imc-unknown-none-elf`                    |         [ESP32-C2]         |
+| [esp32c3-hal] |                    `riscv32imc-unknown-none-elf`                    |         [ESP32-C3]         |
 | [esp32s2-hal] |                      `xtensa-esp32s2-none-elf`                      |         [ESP32-S2]         |
 | [esp32s3-hal] |                      `xtensa-esp32s3-none-elf`                      |         [ESP32-S3]         |
-
-_\* via [atomic emulation]_
 
 [here]: https://github.com/esp-rs/esp-hal/issues/19
 [esp-idf-hal]: https://github.com/esp-rs/esp-idf-hal
@@ -78,6 +76,7 @@ The **M**inimum **S**upported **R**ust **V**ersions are:
 
 - `1.65.0` for RISC-V devices (**ESP32-C2**, **ESP32-C3**)
 - `1.65.0` for Xtensa devices (**ESP32**, **ESP32-S2**, **ESP32-S3**)
+- `1.67.0` for all `async` examples (`embassy_hello_world`, `embassy_wait`, etc.)
 
 Note that targeting the Xtensa ISA currently requires the use of the [esp-rs/rust] compiler fork. The [esp-rs/rust-build] repository has pre-compiled release artifacts for most common platforms, and provides installation scripts to aid you in the process.
 

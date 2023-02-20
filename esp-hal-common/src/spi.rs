@@ -52,11 +52,7 @@ use fugit::HertzU32;
 
 use crate::{
     clock::Clocks,
-    dma::{
-        private::{Rx, Tx},
-        DmaError,
-        DmaPeripheral,
-    },
+    dma::{DmaError, DmaPeripheral, Rx, Tx},
     peripheral::{Peripheral, PeripheralRef},
     peripherals::spi2::RegisterBlock,
     system::PeripheralClockControl,
@@ -325,14 +321,9 @@ pub mod dma {
     use super::Spi3Instance;
     use super::{Instance, InstanceDma, Spi, Spi2Instance, MAX_DMA_SIZE};
     #[cfg(any(esp32, esp32s2))]
-    use crate::dma::private::Spi3Peripheral;
+    use crate::dma::Spi3Peripheral;
     use crate::{
-        dma::{
-            private::{Rx, Spi2Peripheral, SpiPeripheral, Tx},
-            Channel,
-            DmaTransfer,
-            DmaTransferRxTx,
-        },
+        dma::{Channel, DmaTransfer, DmaTransferRxTx, Rx, Spi2Peripheral, SpiPeripheral, Tx},
         peripheral::PeripheralRef,
     };
 
@@ -637,12 +628,153 @@ pub mod dma {
         }
     }
 
+    #[cfg(feature = "async")]
+    mod asynch {
+        use super::*;
+
+        impl<'d, T, TX, RX, P> embedded_hal_async::spi::SpiBusWrite for SpiDma<'d, T, TX, RX, P>
+        where
+            T: InstanceDma<TX, RX>,
+            TX: Tx,
+            RX: Rx,
+            P: SpiPeripheral,
+        {
+            async fn write(&mut self, words: &[u8]) -> Result<(), Self::Error> {
+                for chunk in words.chunks(MAX_DMA_SIZE) {
+                    self.spi.start_write_bytes_dma(
+                        chunk.as_ptr(),
+                        chunk.len(),
+                        &mut self.channel.tx,
+                    )?;
+
+                    crate::dma::asynch::DmaTxFuture::new(&mut self.channel.tx).await;
+
+                    // FIXME: in the future we should use the peripheral DMA status registers to
+                    // await on both the dma transfer _and_ the peripherals status
+                    self.spi.flush()?;
+                }
+
+                Ok(())
+            }
+        }
+
+        impl<'d, T, TX, RX, P> embedded_hal_async::spi::SpiBusFlush for SpiDma<'d, T, TX, RX, P>
+        where
+            T: InstanceDma<TX, RX>,
+            TX: Tx,
+            RX: Rx,
+            P: SpiPeripheral,
+        {
+            async fn flush(&mut self) -> Result<(), Self::Error> {
+                // TODO use async flush in the future
+                self.spi.flush()
+            }
+        }
+
+        impl<'d, T, TX, RX, P> embedded_hal_async::spi::SpiBusRead for SpiDma<'d, T, TX, RX, P>
+        where
+            T: InstanceDma<TX, RX>,
+            TX: Tx,
+            RX: Rx,
+            P: SpiPeripheral,
+        {
+            async fn read(&mut self, words: &mut [u8]) -> Result<(), Self::Error> {
+                self.spi.start_read_bytes_dma(
+                    words.as_mut_ptr(),
+                    words.len(),
+                    &mut self.channel.rx,
+                )?;
+
+                crate::dma::asynch::DmaRxFuture::new(&mut self.channel.rx).await;
+
+                Ok(())
+            }
+        }
+
+        impl<'d, T, TX, RX, P> embedded_hal_async::spi::SpiBus for SpiDma<'d, T, TX, RX, P>
+        where
+            T: InstanceDma<TX, RX>,
+            TX: Tx,
+            RX: Rx,
+            P: SpiPeripheral,
+        {
+            async fn transfer<'a>(
+                &'a mut self,
+                read: &'a mut [u8],
+                write: &'a [u8],
+            ) -> Result<(), Self::Error> {
+                let mut idx = 0;
+                loop {
+                    let write_idx = isize::min(idx, write.len() as isize);
+                    let write_len = usize::min(write.len() - idx as usize, MAX_DMA_SIZE);
+
+                    let read_idx = isize::min(idx, read.len() as isize);
+                    let read_len = usize::min(read.len() - idx as usize, MAX_DMA_SIZE);
+
+                    self.spi.start_transfer_dma(
+                        unsafe { write.as_ptr().offset(write_idx) },
+                        write_len,
+                        unsafe { read.as_mut_ptr().offset(read_idx) },
+                        read_len,
+                        &mut self.channel.tx,
+                        &mut self.channel.rx,
+                    )?;
+
+                    embassy_futures::join::join(
+                        crate::dma::asynch::DmaTxFuture::new(&mut self.channel.tx),
+                        crate::dma::asynch::DmaRxFuture::new(&mut self.channel.rx),
+                    )
+                    .await;
+
+                    // FIXME: in the future we should use the peripheral DMA status registers to
+                    // await on both the dma transfer _and_ the peripherals status
+                    self.spi.flush()?;
+
+                    idx += MAX_DMA_SIZE as isize;
+                    if idx >= write.len() as isize && idx >= read.len() as isize {
+                        break;
+                    }
+                }
+
+                Ok(())
+            }
+
+            async fn transfer_in_place<'a>(
+                &'a mut self,
+                words: &'a mut [u8],
+            ) -> Result<(), Self::Error> {
+                for chunk in words.chunks_mut(MAX_DMA_SIZE) {
+                    self.spi.start_transfer_dma(
+                        chunk.as_ptr(),
+                        chunk.len(),
+                        chunk.as_mut_ptr(),
+                        chunk.len(),
+                        &mut self.channel.tx,
+                        &mut self.channel.rx,
+                    )?;
+
+                    embassy_futures::join::join(
+                        crate::dma::asynch::DmaTxFuture::new(&mut self.channel.tx),
+                        crate::dma::asynch::DmaRxFuture::new(&mut self.channel.rx),
+                    )
+                    .await;
+
+                    // FIXME: in the future we should use the peripheral DMA status registers to
+                    // await on both the dma transfer _and_ the peripherals status
+                    self.spi.flush()?;
+                }
+
+                Ok(())
+            }
+        }
+    }
+
     #[cfg(feature = "eh1")]
     mod ehal1 {
         use embedded_hal_1::spi::{SpiBus, SpiBusFlush, SpiBusRead, SpiBusWrite};
 
         use super::{super::InstanceDma, SpiDma, SpiPeripheral};
-        use crate::dma::private::{Rx, Tx};
+        use crate::dma::{Rx, Tx};
 
         impl<'d, T, TX, RX, P> embedded_hal_1::spi::ErrorType for SpiDma<'d, T, TX, RX, P>
         where
@@ -1431,16 +1563,28 @@ pub trait Instance {
             self.configure_datalen(chunk.len() as u32 * 8);
 
             let fifo_ptr = reg_block.w0.as_ptr();
-            unsafe {
-                // It seems that `copy_nonoverlapping` is significantly faster than regular
-                // `copy`, by about 20%... ?
-                core::ptr::copy_nonoverlapping::<u32>(
-                    chunk.as_ptr() as *const u32,
-                    fifo_ptr as *mut u32,
-                    // FIXME: Using any other transfer length **does not work**. I don't understand
-                    // why.
-                    FIFO_SIZE / 4,
-                );
+            for i in (0..chunk.len()).step_by(4) {
+                let word = match (chunk.len() - i) % 4 {
+                    0 => {
+                        (chunk[i] as u32)
+                            | (chunk[i + 1] as u32) << 8
+                            | (chunk[i + 2] as u32) << 16
+                            | (chunk[i + 3] as u32) << 24
+                    }
+
+                    3 => {
+                        (chunk[i] as u32) | (chunk[i + 1] as u32) << 8 | (chunk[i + 2] as u32) << 16
+                    }
+
+                    2 => (chunk[i] as u32) | (chunk[i + 1] as u32) << 8,
+
+                    1 => chunk[i] as u32,
+
+                    _ => panic!(),
+                };
+                unsafe {
+                    fifo_ptr.add(i / 4).write_volatile(word);
+                }
             }
 
             self.update();

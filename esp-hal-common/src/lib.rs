@@ -20,6 +20,9 @@
 
 #![no_std]
 #![cfg_attr(xtensa, feature(asm_experimental_arch))]
+#![cfg_attr(feature = "async", allow(incomplete_features))]
+#![cfg_attr(feature = "async", feature(async_fn_in_trait))]
+#![cfg_attr(feature = "async", feature(impl_trait_projections))]
 
 #[cfg_attr(esp32, path = "peripherals/esp32.rs")]
 #[cfg_attr(esp32c3, path = "peripherals/esp32c3.rs")]
@@ -28,7 +31,27 @@
 #[cfg_attr(esp32s3, path = "peripherals/esp32s3.rs")]
 pub mod peripherals;
 
+#[cfg(riscv)]
+pub use esp_riscv_rt;
+#[cfg(riscv)]
+pub use esp_riscv_rt::entry;
+#[cfg(riscv)]
+pub use esp_riscv_rt::riscv;
 pub use procmacros as macros;
+#[cfg(xtensa)]
+pub use xtensa_lx;
+#[cfg(xtensa)]
+pub use xtensa_lx_rt;
+#[cfg(xtensa)]
+pub use xtensa_lx_rt::entry;
+
+/// State of the CPU saved when entering exception or interrupt
+pub mod trapframe {
+    #[cfg(riscv)]
+    pub use esp_riscv_rt::TrapFrame;
+    #[cfg(xtensa)]
+    pub use xtensa_lx_rt::exception::Context as TrapFrame;
+}
 
 #[cfg(rmt)]
 pub use self::pulse_control::PulseControl;
@@ -45,6 +68,8 @@ pub use self::{
     uart::Uart,
 };
 
+#[cfg(aes)]
+pub mod aes;
 pub mod analog;
 pub mod clock;
 pub mod delay;
@@ -133,7 +158,7 @@ mod critical_section_impl {
         unsafe impl critical_section::Impl for super::CriticalSection {
             unsafe fn acquire() -> critical_section::RawRestoreState {
                 let tkn: critical_section::RawRestoreState;
-                core::arch::asm!("rsil {0}, 15", out(reg) tkn);
+                core::arch::asm!("rsil {0}, 5", out(reg) tkn);
                 #[cfg(multi_core)]
                 {
                     let guard = super::multicore::MULTICORE_LOCK.lock();
@@ -160,6 +185,8 @@ mod critical_section_impl {
 
     #[cfg(riscv)]
     mod riscv {
+        use esp_riscv_rt::riscv;
+
         unsafe impl critical_section::Impl for super::CriticalSection {
             unsafe fn acquire() -> critical_section::RawRestoreState {
                 let mut mstatus = 0u32;

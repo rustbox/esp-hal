@@ -1,6 +1,6 @@
 [package]
 name    = "esp-hal-common"
-version = "0.4.0"
+version = "0.6.0"
 authors = [
     "Jesse Braham <jesse@beta7.io>",
     "Björn Quentin <bjoern.quentin@mobile-j.de>",
@@ -23,24 +23,25 @@ esp-synopsys-usb-otg = { version = "0.3.1", optional = true, features = ["fs", "
 fugit                = "0.3.6"
 lock_api             = { version = "0.4.9", optional = true }
 nb                   = "1.0.0"
-paste                = "1.0.9"
-procmacros           = { version = "0.1.0", package = "esp-hal-procmacros", path = "../esp-hal-procmacros" }
+paste                = "1.0.11"
+procmacros           = { version = "0.3.0", package = "esp-hal-procmacros", path = "../esp-hal-procmacros" }
 strum                = { version = "0.24.1", default-features = false, features = ["derive"] }
 void                 = { version = "1.0.2", default-features = false }
 usb-device           = { version = "0.2.9", optional = true }
 
 # async
-embedded-hal-async = { version = "0.1.0-alpha.3", optional = true }
+embedded-hal-async = { version = "0.2.0-alpha.0", optional = true }
 embassy-sync       = { version = "0.1.0", optional = true }
 embassy-time       = { version = "0.1.0", features = ["nightly"], optional = true }
+embassy-futures    = { version = "0.1.0", optional = true }
 
 # RISC-V
-riscv                       = { version = "0.10.1", optional = true }
-riscv-atomic-emulation-trap = { version = "0.3.1",  optional = true }
+esp-riscv-rt                = { version = "0.1.0", optional = true }
+riscv-atomic-emulation-trap = { version = "0.4.0", optional = true }
 
 # Xtensa
-xtensa-lx    = { version = "0.7.0",  optional = true }
-xtensa-lx-rt = { version = "0.14.0", optional = true }
+xtensa-lx    = { version = "0.8.0",  optional = true }
+xtensa-lx-rt = { version = "0.15.0", optional = true }
 
 # Smart-LED (e.g., WS2812/SK68XX) support
 smart-leds-trait = { version = "0.2.1", optional = true }
@@ -52,18 +53,21 @@ ufmt-write = { version = "0.1.0", optional = true }
 # Each supported device MUST have its PAC included below along with a
 # corresponding feature. We rename the PAC packages because we cannot
 # have dependencies and features with the same names.
-esp32   = { version = "0.19.0", features = ["critical-section"], optional = true }
-esp32c2 = { version = "0.6.1",  features = ["critical-section"], optional = true }
-esp32c3 = { version = "0.9.1",  features = ["critical-section"], optional = true }
-esp32s2 = { version = "0.9.0",  features = ["critical-section"], optional = true }
-esp32s3 = { version = "0.13.0", features = ["critical-section"], optional = true }
+esp32   = { version = "0.21.0", features = ["critical-section"], optional = true }
+esp32c2 = { version = "0.8.0",  features = ["critical-section"], optional = true }
+esp32c3 = { version = "0.11.0", features = ["critical-section"], optional = true }
+esp32s2 = { version = "0.12.0", features = ["critical-section"], optional = true }
+esp32s3 = { version = "0.15.0", features = ["critical-section"], optional = true }
 
 [features]
-esp32   = ["esp32/rt"  , "xtensa", "xtensa-lx/esp32",   "xtensa-lx-rt/esp32",   "lock_api"]
-esp32c2 = ["esp32c2/rt", "riscv"]
-esp32c3 = ["esp32c3/rt", "riscv"]
-esp32s2 = ["esp32s2/rt", "xtensa", "xtensa-lx/esp32s2", "xtensa-lx-rt/esp32s2",             "esp-synopsys-usb-otg", "usb-device"]
-esp32s3 = ["esp32s3/rt", "xtensa", "xtensa-lx/esp32s3", "xtensa-lx-rt/esp32s3", "lock_api", "esp-synopsys-usb-otg", "usb-device"]
+esp32   = ["esp32/rt"  , "xtensa", "xtensa-lx/esp32",   "xtensa-lx-rt/esp32",   "lock_api", "procmacros/esp32"]
+esp32c2 = ["esp32c2/rt", "riscv", "procmacros/esp32c2"]
+esp32c3 = ["esp32c3/rt", "riscv", "procmacros/esp32c3"]
+esp32s2 = ["esp32s2/rt", "xtensa", "xtensa-lx/esp32s2", "xtensa-lx-rt/esp32s2",             "esp-synopsys-usb-otg", "usb-device", "procmacros/esp32s2"]
+esp32s3 = ["esp32s3/rt", "xtensa", "xtensa-lx/esp32s3", "xtensa-lx-rt/esp32s3", "lock_api", "esp-synopsys-usb-otg", "usb-device", "procmacros/esp32s3"]
+
+esp32_40mhz = []
+esp32_26mhz = []
 
 esp32c2_40mhz = []
 esp32c2_26mhz = []
@@ -81,12 +85,12 @@ ufmt = ["ufmt-write"]
 vectored = ["procmacros/interrupt"]
 
 # Implement the `embedded-hal-async==1.0.0-alpha.x` traits
-async   = ["embedded-hal-async", "eh1", "embassy-sync"]
+async   = ["embedded-hal-async", "eh1", "embassy-sync", "embassy-futures"]
 embassy = ["embassy-time"]
 
 embassy-time-systick = []
 embassy-time-timg0   = []
 
 # Architecture-specific features (intended for internal use)
-riscv  = ["dep:riscv", "critical-section/restore-state-u8",  "procmacros/riscv", "riscv-atomic-emulation-trap"]
-xtensa = [             "critical-section/restore-state-u32", "procmacros/xtensa"]
+riscv  = ["critical-section/restore-state-u8",  "procmacros/riscv", "esp-riscv-rt", "riscv-atomic-emulation-trap"]
+xtensa = ["critical-section/restore-state-u32", "procmacros/xtensa"]

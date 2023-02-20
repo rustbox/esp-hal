@@ -13,6 +13,7 @@ use esp32c3_hal::{
     interrupt,
     peripherals::{self, Peripherals, UART0},
     prelude::*,
+    riscv,
     timer::TimerGroup,
     uart::config::AtCmdConfig,
     Cpu,
@@ -21,7 +22,6 @@ use esp32c3_hal::{
 };
 use esp_backtrace as _;
 use nb::block;
-use riscv_rt::entry;
 
 static SERIAL: Mutex<RefCell<Option<Uart<UART0>>>> = Mutex::new(RefCell::new(None));
 

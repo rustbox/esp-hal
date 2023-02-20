@@ -117,6 +117,8 @@ pub trait Pin {
         self.listen_with_options(event, true, false, false)
     }
 
+    fn is_listening(&self) -> bool;
+
     fn listen_with_options(
         &mut self,
         event: Event,
@@ -402,13 +404,7 @@ pub trait BankGpioRegisterAccess {
         gpio.func_in_sel_cfg[signal as usize].modify(|_, w| w.sel().clear_bit());
     }
 
-    fn set_int_enable(
-        &self,
-        gpio_num: u8,
-        int_ena: u32,
-        int_type: u8,
-        wake_up_from_light_sleep: bool,
-    ) {
+    fn set_int_enable(gpio_num: u8, int_ena: u32, int_type: u8, wake_up_from_light_sleep: bool) {
         let gpio = unsafe { &*crate::peripherals::GPIO::PTR };
         gpio.pin[gpio_num as usize].modify(|_, w| unsafe {
             w.int_ena()
@@ -835,6 +831,14 @@ where
                     .bit(wake_up_from_light_sleep)
             });
         }
+    }
+
+    fn is_listening(&self) -> bool {
+        let bits = unsafe { &*GPIO::PTR }.pin[GPIONUM as usize]
+            .read()
+            .int_ena()
+            .bits();
+        bits != 0
     }
 
     fn unlisten(&mut self) {
@@ -1356,7 +1360,7 @@ impl<MODE, RA, IRA, PINTYPE, SIG, const GPIONUM: u8> GpioPin<MODE, RA, IRA, PINT
 where
     RA: BankGpioRegisterAccess,
     IRA: InteruptStatusRegisterAccess,
-    PINTYPE: IsOutputPin,
+    PINTYPE: IsAnalogPin,
     SIG: GpioSignal,
 {
     pub fn into_analog(self) -> GpioPin<Analog, RA, IRA, PINTYPE, SIG, GPIONUM> {
@@ -1369,6 +1373,140 @@ where
             _ira: PhantomData,
             _signals: PhantomData,
         }
+    }
+}
+
+impl<MODE> embedded_hal::digital::v2::InputPin for AnyPin<crate::Input<MODE>> {
+    type Error = core::convert::Infallible;
+
+    fn is_high(&self) -> Result<bool, Self::Error> {
+        let inner = &self.inner;
+        handle_gpio_input!(inner, target, { target.is_high() })
+    }
+
+    fn is_low(&self) -> Result<bool, Self::Error> {
+        let inner = &self.inner;
+        handle_gpio_input!(inner, target, { target.is_low() })
+    }
+}
+
+#[cfg(feature = "eh1")]
+impl<MODE> embedded_hal_1::digital::ErrorType for AnyPin<Input<MODE>> {
+    type Error = Infallible;
+}
+
+#[cfg(feature = "eh1")]
+impl<MODE> embedded_hal_1::digital::InputPin for AnyPin<Input<MODE>> {
+    fn is_high(&self) -> Result<bool, Self::Error> {
+        let inner = &self.inner;
+        handle_gpio_input!(inner, target, { target.is_high() })
+    }
+
+    fn is_low(&self) -> Result<bool, Self::Error> {
+        let inner = &self.inner;
+        handle_gpio_input!(inner, target, { target.is_low() })
+    }
+}
+
+impl<MODE> embedded_hal::digital::v2::OutputPin for AnyPin<Output<MODE>> {
+    type Error = Infallible;
+
+    fn set_low(&mut self) -> Result<(), Self::Error> {
+        let inner = &mut self.inner;
+        handle_gpio_output!(inner, target, { target.set_low() })
+    }
+
+    fn set_high(&mut self) -> Result<(), Self::Error> {
+        let inner = &mut self.inner;
+        handle_gpio_output!(inner, target, { target.set_high() })
+    }
+}
+
+impl<MODE> embedded_hal::digital::v2::StatefulOutputPin for AnyPin<Output<MODE>> {
+    fn is_set_high(&self) -> Result<bool, Self::Error> {
+        let inner = &self.inner;
+        handle_gpio_output!(inner, target, { target.is_set_high() })
+    }
+
+    fn is_set_low(&self) -> Result<bool, Self::Error> {
+        let inner = &self.inner;
+        handle_gpio_output!(inner, target, { target.is_set_low() })
+    }
+}
+
+impl<MODE> embedded_hal::digital::v2::ToggleableOutputPin for AnyPin<Output<MODE>> {
+    type Error = Infallible;
+
+    fn toggle(&mut self) -> Result<(), Self::Error> {
+        let inner = &mut self.inner;
+        handle_gpio_output!(inner, target, { target.toggle() })
+    }
+}
+
+#[cfg(feature = "eh1")]
+impl<MODE> embedded_hal_1::digital::ErrorType for AnyPin<Output<MODE>> {
+    type Error = Infallible;
+}
+
+#[cfg(feature = "eh1")]
+impl<MODE> embedded_hal_1::digital::OutputPin for AnyPin<Output<MODE>> {
+    fn set_low(&mut self) -> Result<(), Self::Error> {
+        let inner = &mut self.inner;
+        handle_gpio_output!(inner, target, { target.set_low() })
+    }
+
+    fn set_high(&mut self) -> Result<(), Self::Error> {
+        let inner = &mut self.inner;
+        handle_gpio_output!(inner, target, { target.set_high() })
+    }
+}
+
+#[cfg(feature = "eh1")]
+impl<MODE> embedded_hal_1::digital::StatefulOutputPin for AnyPin<Output<MODE>> {
+    fn is_set_high(&self) -> Result<bool, Self::Error> {
+        let inner = &self.inner;
+        handle_gpio_output!(inner, target, { target.is_set_high() })
+    }
+
+    fn is_set_low(&self) -> Result<bool, Self::Error> {
+        let inner = &self.inner;
+        handle_gpio_output!(inner, target, { target.is_set_low() })
+    }
+}
+
+#[cfg(feature = "eh1")]
+impl<MODE> embedded_hal_1::digital::ToggleableOutputPin for AnyPin<Output<MODE>> {
+    fn toggle(&mut self) -> Result<(), Self::Error> {
+        let inner = &mut self.inner;
+        handle_gpio_output!(inner, target, { target.toggle() })
+    }
+}
+
+#[cfg(feature = "async")]
+impl<MODE> embedded_hal_async::digital::Wait for AnyPin<Input<MODE>> {
+    async fn wait_for_high(&mut self) -> Result<(), Self::Error> {
+        let inner = &mut self.inner;
+        handle_gpio_input!(inner, target, { target.wait_for_high().await })
+    }
+
+    async fn wait_for_low(&mut self) -> Result<(), Self::Error> {
+        let inner = &mut self.inner;
+        handle_gpio_input!(inner, target, { target.wait_for_low().await })
+    }
+
+    async fn wait_for_rising_edge(&mut self) -> Result<(), Self::Error> {
+        let inner = &mut self.inner;
+        handle_gpio_input!(inner, target, { target.wait_for_rising_edge().await })
+    }
+
+    async fn wait_for_falling_edge(&mut self) -> Result<(), Self::Error> {
+        let inner = &mut self.inner;
+        handle_gpio_input!(inner, target, { target.wait_for_falling_edge().await })
+    }
+
+    async fn wait_for_any_edge(&mut self) -> Result<(), Self::Error> {
+        let inner = &mut self.inner;
+        handle_gpio_input!(inner, target, { target.wait_for_any_edge().await })
     }
 }
 
@@ -1467,6 +1605,65 @@ macro_rules! gpio {
             $(
                 pub type [<Gpio $gpionum >]<MODE> = GpioPin<MODE, [< Bank $bank GpioRegisterAccess >], $crate::gpio::[< $cores CoreInteruptStatusRegisterAccessBank $bank >], [< $type PinType >], [<Gpio $gpionum Signals>], $gpionum>;
             )+
+
+            pub(crate) enum ErasedPin<MODE> {
+                $(
+                    [<Gpio $gpionum >]([<Gpio $gpionum >]<MODE>),
+                )+
+            }
+
+            pub struct AnyPin<MODE> {
+                pub(crate) inner: ErasedPin<MODE>
+            }
+
+            $(
+            impl<MODE> From< [<Gpio $gpionum >]<MODE> > for AnyPin<MODE> {
+                fn from(value: [<Gpio $gpionum >]<MODE>) -> Self {
+                    AnyPin {
+                        inner: ErasedPin::[<Gpio $gpionum >](value)
+                    }
+                }
+            }
+
+            impl<MODE> [<Gpio $gpionum >]<MODE> {
+                pub fn degrade(self) -> AnyPin<MODE> {
+                    AnyPin {
+                        inner: ErasedPin::[<Gpio $gpionum >](self)
+                    }
+                }
+            }
+
+            impl<MODE> TryInto<[<Gpio $gpionum >]<MODE>> for AnyPin<MODE> {
+                type Error = ();
+
+                fn try_into(self) -> Result<[<Gpio $gpionum >]<MODE>, Self::Error> {
+                    match self.inner {
+                        ErasedPin::[<Gpio $gpionum >](gpio) => Ok(gpio),
+                        _ => Err(()),
+                    }
+                }
+            }
+            )+
+
+            procmacros::make_gpio_enum_dispatch_macro!(
+                handle_gpio_output
+                { InputOutputAnalog, InputOutput, }
+                {
+                    $(
+                        $type,$gpionum
+                    )+
+                }
+            );
+
+            procmacros::make_gpio_enum_dispatch_macro!(
+                handle_gpio_input
+                { InputOutputAnalog, InputOutput, InputOnlyAnalog }
+                {
+                    $(
+                        $type,$gpionum
+                    )+
+                }
+            );
         }
     };
 }
@@ -1642,3 +1839,119 @@ pub(crate) use gpio;
 
 pub use self::types::{InputSignal, OutputSignal};
 use self::types::{ONE_INPUT, ZERO_INPUT};
+
+#[cfg(feature = "async")]
+mod asynch {
+    use core::task::{Context, Poll};
+
+    use embassy_sync::waitqueue::AtomicWaker;
+    use embedded_hal_async::digital::Wait;
+
+    use super::*;
+    use crate::prelude::*;
+
+    #[allow(clippy::declare_interior_mutable_const)]
+    const NEW_AW: AtomicWaker = AtomicWaker::new();
+    static PIN_WAKERS: [AtomicWaker; NUM_PINS] = [NEW_AW; NUM_PINS];
+
+    impl<MODE, RA, IRA, PINTYPE, SIG, const GPIONUM: u8> Wait
+        for GpioPin<Input<MODE>, RA, IRA, PINTYPE, SIG, GPIONUM>
+    where
+        RA: BankGpioRegisterAccess,
+        PINTYPE: IsInputPin,
+        IRA: InteruptStatusRegisterAccess,
+        SIG: GpioSignal,
+    {
+        async fn wait_for_high(&mut self) -> Result<(), Self::Error> {
+            PinFuture::new(self, Event::HighLevel).await
+        }
+
+        async fn wait_for_low(&mut self) -> Result<(), Self::Error> {
+            PinFuture::new(self, Event::LowLevel).await
+        }
+
+        async fn wait_for_rising_edge(&mut self) -> Result<(), Self::Error> {
+            PinFuture::new(self, Event::RisingEdge).await
+        }
+
+        async fn wait_for_falling_edge(&mut self) -> Result<(), Self::Error> {
+            PinFuture::new(self, Event::FallingEdge).await
+        }
+
+        async fn wait_for_any_edge(&mut self) -> Result<(), Self::Error> {
+            PinFuture::new(self, Event::AnyEdge).await
+        }
+    }
+
+    pub struct PinFuture<'a, P> {
+        pin: &'a mut P,
+    }
+
+    impl<'a, P> PinFuture<'a, P>
+    where
+        P: crate::gpio::Pin + embedded_hal_1::digital::ErrorType,
+    {
+        pub fn new(pin: &'a mut P, event: Event) -> Self {
+            pin.listen(event);
+            Self { pin }
+        }
+    }
+
+    impl<'a, P> core::future::Future for PinFuture<'a, P>
+    where
+        P: crate::gpio::Pin + embedded_hal_1::digital::ErrorType,
+    {
+        type Output = Result<(), P::Error>;
+
+        fn poll(self: core::pin::Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+            PIN_WAKERS[self.pin.number() as usize].register(cx.waker());
+
+            // if pin is no longer listening its been triggered
+            // therefore the future has resolved
+            if !self.pin.is_listening() {
+                Poll::Ready(Ok(()))
+            } else {
+                Poll::Pending
+            }
+        }
+    }
+
+    #[interrupt]
+    unsafe fn GPIO() {
+        // TODO how to handle dual core reg access
+        // we need to check which core the interrupt is currently firing on
+        // and only fire interrupts registered for that core
+        type Bank0 = SingleCoreInteruptStatusRegisterAccessBank0;
+        #[cfg(any(esp32, esp32s2, esp32s3))]
+        type Bank1 = SingleCoreInteruptStatusRegisterAccessBank1;
+
+        let mut intrs = Bank0::pro_cpu_interrupt_status_read() as u64;
+
+        #[cfg(any(esp32, esp32s2, esp32s3))]
+        {
+            intrs |= (Bank1::pro_cpu_interrupt_status_read() as u64) << 32;
+        }
+
+        // clear interrupts
+        Bank0GpioRegisterAccess::write_interrupt_status_clear(!0);
+        #[cfg(any(esp32, esp32s2, esp32s3))]
+        Bank1GpioRegisterAccess::write_interrupt_status_clear(!0);
+
+        while intrs != 0 {
+            let pin_nr = intrs.trailing_zeros();
+            cfg_if::cfg_if! {
+                if #[cfg(any(esp32, esp32s2, esp32s3))] {
+                    if pin_nr < 32 {
+                        Bank0GpioRegisterAccess::set_int_enable(pin_nr as u8, 0, 0, false);
+                    } else {
+                        Bank1GpioRegisterAccess::set_int_enable(pin_nr as u8, 0, 0, false);
+                    }
+                } else {
+                    Bank0GpioRegisterAccess::set_int_enable(pin_nr as u8, 0, 0, false);
+                }
+            }
+            PIN_WAKERS[pin_nr as usize].wake(); // wake task
+            intrs &= !(1 << pin_nr);
+        }
+    }
+}

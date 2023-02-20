@@ -14,6 +14,7 @@ use esp32c3_hal::{
     interrupt,
     peripherals::{self, Peripherals, USB_DEVICE},
     prelude::*,
+    riscv,
     timer::TimerGroup,
     Cpu,
     Rtc,
@@ -21,7 +22,6 @@ use esp32c3_hal::{
 };
 use esp_backtrace as _;
 use nb::block;
-use riscv_rt::entry;
 
 static USB_SERIAL: Mutex<RefCell<Option<UsbSerialJtag<USB_DEVICE>>>> =
     Mutex::new(RefCell::new(None));

@@ -14,11 +14,11 @@ use esp32c3_hal::{
     interrupt,
     peripherals::{self, Peripherals},
     prelude::*,
+    riscv,
     Rtc,
     Rwdt,
 };
 use esp_backtrace as _;
-use riscv_rt::entry;
 
 static RWDT: Mutex<RefCell<Option<Rwdt>>> = Mutex::new(RefCell::new(None));
 

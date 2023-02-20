@@ -30,7 +30,6 @@ use esp32c3_hal::{
 };
 use esp_backtrace as _;
 use nb::block;
-use riscv_rt::entry;
 use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306};
 
 #[entry]

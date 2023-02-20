@@ -1,5 +1,4 @@
-ENTRY(_start_hal)
-PROVIDE(_start_trap = _start_trap_hal);
+ENTRY(_start)
 
 PROVIDE(_stext = ORIGIN(REGION_TEXT));
 PROVIDE(_stack_start = ORIGIN(REGION_STACK) + LENGTH(REGION_STACK));
@@ -36,6 +35,12 @@ PROVIDE(_setup_interrupts = default_setup_interrupts);
    and implement wake-up in platform-dependent way (e.g. after waiting for a user interrupt).
 */
 PROVIDE(_mp_hook = default_mp_hook);
+
+/* # Start trap function override
+  By default uses the riscv crates default trap handler
+  but by providing the `_start_trap` symbol external crates can override.
+*/
+PROVIDE(_start_trap = default_start_trap);
 
 SECTIONS
 {
@@ -100,8 +105,8 @@ SECTIONS
     /* This section is required to skip .rwtext area because REGION_RWTEXT
      * and REGION_BSS reflect the same address space on different buses.
      */
-    . = ORIGIN(REGION_BSS) + _rwtext_size;
-  } > REGION_BSS
+    . = ORIGIN(REGION_DATA) + _rwtext_size + 8 + SIZEOF(.data);
+  } > REGION_DATA
 
   .bss (NOLOAD) :
   {

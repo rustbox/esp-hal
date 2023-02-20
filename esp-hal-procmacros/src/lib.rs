@@ -15,7 +15,11 @@ use syn::{
     Type,
     Visibility,
 };
-use syn::{parse_macro_input, AttributeArgs};
+use syn::{
+    parse::{Parse, ParseStream},
+    parse_macro_input,
+    AttributeArgs,
+};
 
 #[derive(Debug, Default, FromMeta)]
 #[darling(default)]
@@ -130,6 +134,8 @@ pub fn ram(args: TokenStream, input: TokenStream) -> TokenStream {
 #[cfg(feature = "interrupt")]
 #[proc_macro_attribute]
 pub fn interrupt(args: TokenStream, input: TokenStream) -> TokenStream {
+    use proc_macro_crate::{crate_name, FoundCrate};
+
     let mut f: ItemFn = syn::parse(input).expect("`#[interrupt]` must be applied to a function");
 
     let attr_args = parse_macro_input!(args as AttributeArgs);
@@ -196,10 +202,46 @@ pub fn interrupt(args: TokenStream, input: TokenStream) -> TokenStream {
         &format!("__esp_hal_internal_{}", f.sig.ident),
         proc_macro2::Span::call_site(),
     );
+
+    #[cfg(feature = "esp32")]
+    let hal_crate = crate_name("esp32-hal");
+    #[cfg(feature = "esp32s2")]
+    let hal_crate = crate_name("esp32s2-hal");
+    #[cfg(feature = "esp32s3")]
+    let hal_crate = crate_name("esp32s3-hal");
+    #[cfg(feature = "esp32c2")]
+    let hal_crate = crate_name("esp32c2-hal");
+    #[cfg(feature = "esp32c3")]
+    let hal_crate = crate_name("esp32c3-hal");
+
+    #[cfg(feature = "esp32")]
+    let hal_crate_name = Ident::new("esp32_hal", Span::call_site().into());
+    #[cfg(feature = "esp32s2")]
+    let hal_crate_name = Ident::new("esp32s2_hal", Span::call_site().into());
+    #[cfg(feature = "esp32s3")]
+    let hal_crate_name = Ident::new("esp32s3_hal", Span::call_site().into());
+    #[cfg(feature = "esp32c2")]
+    let hal_crate_name = Ident::new("esp32c2_hal", Span::call_site().into());
+    #[cfg(feature = "esp32c3")]
+    let hal_crate_name = Ident::new("esp32c3_hal", Span::call_site().into());
+
+    let interrupt_in_hal_crate = match hal_crate {
+        Ok(FoundCrate::Itself) => {
+            quote!( #hal_crate_name::peripherals::Interrupt::#ident_s )
+        }
+        Ok(FoundCrate::Name(ref name)) => {
+            let ident = Ident::new(&name, Span::call_site().into());
+            quote!( #ident::peripherals::Interrupt::#ident_s )
+        }
+        Err(_) => {
+            quote!( crate::peripherals::Interrupt::#ident_s )
+        }
+    };
+
     f.block.stmts.extend(std::iter::once(
         syn::parse2(quote! {{
             // Check that this interrupt actually exists
-            crate::peripherals::Interrupt::#ident_s;
+            #interrupt_in_hal_crate;
         }})
         .unwrap(),
     ));
@@ -214,25 +256,34 @@ pub fn interrupt(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let export_name = ident_s.to_string();
 
-    #[cfg(feature = "xtensa")]
-    let context = quote! {
-        xtensa_lx_rt::exception::Context
-    };
-
-    #[cfg(feature = "riscv")]
-    let context = quote! {
-        crate::interrupt::TrapFrame
+    let trap_frame_in_hal_crate = match hal_crate {
+        Ok(FoundCrate::Itself) => {
+            quote!(#hal_crate_name::trapframe::TrapFrame)
+        }
+        Ok(FoundCrate::Name(ref name)) => {
+            let ident = Ident::new(&name, Span::call_site().into());
+            quote!( #ident::trapframe::TrapFrame )
+        }
+        Err(_) => {
+            quote!(crate::trapframe::TrapFrame)
+        }
     };
 
     let context_call =
         (f.sig.inputs.len() == 1).then(|| Ident::new("context", proc_macro2::Span::call_site()));
 
     quote!(
+        macro_rules! foo {
+            () => {
+            };
+        }
+        foo!();
+
         #(#cfgs)*
         #(#attrs)*
         #[doc(hidden)]
         #[export_name = #export_name]
-        pub unsafe extern "C" fn #tramp_ident(context: &mut #context) {
+        pub unsafe extern "C" fn #tramp_ident(context: &mut #trap_frame_in_hal_crate) {
             #ident(
                 #context_call
             )
@@ -305,4 +356,100 @@ fn extract_cfgs(attrs: Vec<Attribute>) -> (Vec<Attribute>, Vec<Attribute>) {
     }
 
     (cfgs, not_cfgs)
+}
+
+#[derive(Debug)]
+struct MakeGpioEnumDispatchMacro {
+    name: String,
+    filter: Vec<String>,
+    elements: Vec<(String, usize)>,
+}
+
+impl Parse for MakeGpioEnumDispatchMacro {
+    fn parse(input: ParseStream) -> syn::parse::Result<Self> {
+        let name = input.parse::<syn::Ident>()?.to_string();
+        let filter = input
+            .parse::<proc_macro2::Group>()?
+            .stream()
+            .into_iter()
+            .map(|v| match v {
+                proc_macro2::TokenTree::Group(_) => String::new(),
+                proc_macro2::TokenTree::Ident(ident) => ident.to_string(),
+                proc_macro2::TokenTree::Punct(_) => String::new(),
+                proc_macro2::TokenTree::Literal(_) => String::new(),
+            })
+            .filter(|p| !p.is_empty())
+            .collect();
+
+        let mut stream = input.parse::<proc_macro2::Group>()?.stream().into_iter();
+
+        let mut elements = vec![];
+
+        let mut element_name = String::new();
+        loop {
+            match stream.next() {
+                Some(v) => match v {
+                    proc_macro2::TokenTree::Ident(ident) => {
+                        element_name = ident.to_string();
+                    }
+                    proc_macro2::TokenTree::Literal(lit) => {
+                        let index = lit.to_string().parse().unwrap();
+                        elements.push((element_name.clone(), index));
+                    }
+                    _ => (),
+                },
+                None => break,
+            }
+        }
+
+        Ok(MakeGpioEnumDispatchMacro {
+            name,
+            filter,
+            elements,
+        })
+    }
+}
+
+#[proc_macro]
+pub fn make_gpio_enum_dispatch_macro(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as MakeGpioEnumDispatchMacro);
+
+    let mut arms = Vec::new();
+
+    for (gpio_type, num) in input.elements {
+        let enum_name = quote::format_ident!("ErasedPin");
+        let variant_name = quote::format_ident!("Gpio{}", num);
+
+        if input.filter.contains(&gpio_type) {
+            let arm = {
+                quote! { #enum_name::#variant_name($target) => $body }
+            };
+            arms.push(arm);
+        } else {
+            let arm = {
+                quote! {
+                    #[allow(unused)]
+                    #enum_name::#variant_name($target) => { panic!("Unsupported") }
+                }
+            };
+            arms.push(arm);
+        }
+    }
+
+    let macro_name = quote::format_ident!("{}", input.name);
+
+    quote! {
+        #[doc(hidden)]
+        #[macro_export]
+        macro_rules! #macro_name {
+            ($m:ident, $target:ident, $body:block) => {
+                match $m {
+                    #(#arms)*
+                }
+            }
+        }
+
+        pub(crate) use #macro_name;
+    }
+    .into()
 }
