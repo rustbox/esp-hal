@@ -2,11 +2,12 @@ fn main() {
     let esp32 = cfg!(feature = "esp32");
     let esp32c2 = cfg!(feature = "esp32c2");
     let esp32c3 = cfg!(feature = "esp32c3");
+    let esp32c6 = cfg!(feature = "esp32c6");
     let esp32s2 = cfg!(feature = "esp32s2");
     let esp32s3 = cfg!(feature = "esp32s3");
 
     // Ensure that exactly one chip has been specified
-    let chip_features = [esp32, esp32c2, esp32c3, esp32s2, esp32s3];
+    let chip_features = [esp32, esp32c2, esp32c3, esp32c6, esp32s2, esp32s3];
     match chip_features.iter().filter(|&&f| f).count() {
         1 => {}
         n => panic!("Exactly 1 chip must be enabled via its Cargo feature, {n} provided"),
@@ -46,6 +47,8 @@ fn main() {
     //   - 'usb_otg'
     //   - 'usb_serial_jtag'
     //   - 'aes'
+    //   - 'plic'
+    //   - 'radio'
     //
     // New symbols can be added as needed, but please be sure to update both this
     // comment and the required vectors below.
@@ -65,6 +68,7 @@ fn main() {
             "timg1",
             "uart2",
             "aes",
+            "radio",
         ]
     } else if esp32c2 {
         vec![
@@ -74,6 +78,7 @@ fn main() {
             "gdma",
             "systimer",
             "timg0",
+            "radio",
         ]
     } else if esp32c3 {
         vec![
@@ -89,6 +94,24 @@ fn main() {
             "timg1",
             "usb_serial_jtag",
             "aes",
+            "radio",
+        ]
+    } else if esp32c6 {
+        vec![
+            "esp32c6",
+            "riscv",
+            "single_core",
+            "gdma",
+            "i2s",
+            "mcpwm",
+            "rmt",
+            "systimer",
+            "timg0",
+            "timg1",
+            "usb_serial_jtag",
+            "plic",
+            "aes",
+            "radio",
         ]
     } else if esp32s2 {
         vec![
@@ -106,6 +129,7 @@ fn main() {
             "timg1",
             "usb_otg",
             "aes",
+            "radio",
         ]
     } else if esp32s3 {
         vec![
@@ -125,6 +149,7 @@ fn main() {
             "usb_otg",
             "usb_serial_jtag",
             "aes",
+            "radio",
         ]
     } else {
         unreachable!(); // We've already confirmed exactly one chip was selected

@@ -53,12 +53,10 @@ use fugit::HertzU32;
 use crate::{
     clock::Clocks,
     dma::{DmaError, DmaPeripheral, Rx, Tx},
+    gpio::{InputPin, InputSignal, OutputPin, OutputSignal},
     peripheral::{Peripheral, PeripheralRef},
     peripherals::spi2::RegisterBlock,
     system::PeripheralClockControl,
-    types::{InputSignal, OutputSignal},
-    InputPin,
-    OutputPin,
 };
 
 /// The size of the FIFO buffer for SPI
@@ -884,7 +882,7 @@ mod ehal1 {
     use embedded_hal_nb::spi::FullDuplex;
 
     use super::*;
-    use crate::OutputPin;
+    use crate::gpio::OutputPin;
 
     impl<T> embedded_hal_1::spi::ErrorType for Spi<'_, T> {
         type Error = super::Error;
@@ -1181,6 +1179,7 @@ where
         self.enable_dma();
         self.update();
 
+        reset_dma_before_load_dma_dscr(reg_block);
         tx.prepare_transfer(
             self.dma_peripheral(),
             false,
@@ -1195,6 +1194,7 @@ where
         )?;
 
         self.clear_dma_interrupts();
+        reset_dma_before_usr_cmd(reg_block);
 
         reg_block.cmd.modify(|_, w| w.usr().set_bit());
 
@@ -1221,12 +1221,16 @@ where
         let reg_block = self.register_block();
         self.configure_datalen(len as u32 * 8);
 
+        tx.is_done();
+
         self.enable_dma();
         self.update();
 
+        reset_dma_before_load_dma_dscr(reg_block);
         tx.prepare_transfer(self.dma_peripheral(), false, ptr, len)?;
 
         self.clear_dma_interrupts();
+        reset_dma_before_usr_cmd(reg_block);
 
         reg_block.cmd.modify(|_, w| w.usr().set_bit());
 
@@ -1242,12 +1246,16 @@ where
         let reg_block = self.register_block();
         self.configure_datalen(len as u32 * 8);
 
+        rx.is_done();
+
         self.enable_dma();
         self.update();
 
+        reset_dma_before_load_dma_dscr(reg_block);
         rx.prepare_transfer(false, self.dma_peripheral(), ptr, len)?;
 
         self.clear_dma_interrupts();
+        reset_dma_before_usr_cmd(reg_block);
 
         reg_block.cmd.modify(|_, w| w.usr().set_bit());
 
@@ -1263,7 +1271,7 @@ where
         }
     }
 
-    #[cfg(any(esp32c2, esp32c3, esp32s3))]
+    #[cfg(any(esp32c2, esp32c3, esp32c6, esp32s3))]
     fn enable_dma(&self) {
         let reg_block = self.register_block();
         reg_block.dma_conf.modify(|_, w| w.dma_tx_ena().set_bit());
@@ -1275,7 +1283,7 @@ where
         // for non GDMA this is done in `assign_tx_device` / `assign_rx_device`
     }
 
-    #[cfg(any(esp32c2, esp32c3, esp32s3))]
+    #[cfg(any(esp32c2, esp32c3, esp32c6, esp32s3))]
     fn clear_dma_interrupts(&self) {
         let reg_block = self.register_block();
         reg_block.dma_int_clr.write(|w| {
@@ -1316,6 +1324,49 @@ where
                 .set_bit()
         });
     }
+}
+
+#[cfg(not(any(esp32, esp32s2)))]
+fn reset_dma_before_usr_cmd(reg_block: &RegisterBlock) {
+    reg_block.dma_conf.modify(|_, w| {
+        w.rx_afifo_rst()
+            .set_bit()
+            .buf_afifo_rst()
+            .set_bit()
+            .dma_afifo_rst()
+            .set_bit()
+    });
+}
+
+#[cfg(any(esp32, esp32s2))]
+fn reset_dma_before_usr_cmd(_reg_block: &RegisterBlock) {}
+
+#[cfg(not(any(esp32, esp32s2)))]
+fn reset_dma_before_load_dma_dscr(_reg_block: &RegisterBlock) {}
+
+#[cfg(any(esp32, esp32s2))]
+fn reset_dma_before_load_dma_dscr(reg_block: &RegisterBlock) {
+    reg_block.dma_conf.modify(|_, w| {
+        w.out_rst()
+            .set_bit()
+            .in_rst()
+            .set_bit()
+            .ahbm_fifo_rst()
+            .set_bit()
+            .ahbm_rst()
+            .set_bit()
+    });
+
+    reg_block.dma_conf.modify(|_, w| {
+        w.out_rst()
+            .clear_bit()
+            .in_rst()
+            .clear_bit()
+            .ahbm_fifo_rst()
+            .clear_bit()
+            .ahbm_rst()
+            .clear_bit()
+    });
 }
 
 impl<TX, RX> InstanceDma<TX, RX> for crate::peripherals::SPI2
@@ -1393,6 +1444,14 @@ pub trait Instance {
                 .mst_clk_sel()
                 .set_bit()
         });
+
+        #[cfg(esp32c6)]
+        unsafe {
+            let pcr = &*esp32c6::PCR::PTR;
+
+            // use default clock source PLL_F80M_CLK
+            pcr.spi2_clkm_conf.modify(|_, w| w.spi2_clkm_sel().bits(1));
+        }
 
         reg_block.ctrl.write(|w| unsafe { w.bits(0) });
 
@@ -1564,7 +1623,12 @@ pub trait Instance {
 
             let fifo_ptr = reg_block.w0.as_ptr();
             for i in (0..chunk.len()).step_by(4) {
-                let word = match (chunk.len() - i) % 4 {
+                let state = if chunk.len() - i < 4 {
+                    chunk.len() % 4
+                } else {
+                    0
+                };
+                let word = match state {
                     0 => {
                         (chunk[i] as u32)
                             | (chunk[i + 1] as u32) << 8
@@ -1693,12 +1757,12 @@ pub trait Instance {
     fn configure_datalen(&self, len: u32) {
         let reg_block = self.register_block();
 
-        #[cfg(any(esp32c2, esp32c3, esp32s3))]
+        #[cfg(any(esp32c2, esp32c3, esp32c6, esp32s3))]
         reg_block
             .ms_dlen
             .write(|w| unsafe { w.ms_data_bitlen().bits(len - 1) });
 
-        #[cfg(not(any(esp32c2, esp32c3, esp32s3)))]
+        #[cfg(not(any(esp32c2, esp32c3, esp32c6, esp32s3)))]
         {
             reg_block
                 .mosi_dlen
@@ -1711,7 +1775,7 @@ pub trait Instance {
     }
 }
 
-#[cfg(any(esp32c2, esp32c3))]
+#[cfg(any(esp32c2, esp32c3, esp32c6))]
 impl Instance for crate::peripherals::SPI2 {
     #[inline(always)]
     fn register_block(&self) -> &RegisterBlock {

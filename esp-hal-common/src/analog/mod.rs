@@ -1,8 +1,6 @@
 #[cfg_attr(esp32, path = "adc/esp32.rs")]
-#[cfg_attr(esp32c2, path = "adc/riscv.rs")]
-#[cfg_attr(esp32c3, path = "adc/riscv.rs")]
-#[cfg_attr(esp32s2, path = "adc/xtensa.rs")]
-#[cfg_attr(esp32s3, path = "adc/xtensa.rs")]
+#[cfg_attr(any(esp32c2, esp32c3, esp32c6), path = "adc/riscv.rs")]
+#[cfg_attr(any(esp32s2, esp32s3), path = "adc/xtensa.rs")]
 pub mod adc;
 #[cfg(dac)]
 pub mod dac;
@@ -10,6 +8,7 @@ pub mod dac;
 pub struct ADC1 {
     _private: (),
 }
+
 pub struct ADC2 {
     _private: (),
 }
@@ -44,27 +43,7 @@ impl crate::peripheral::Peripheral for ADC1 {
     }
 }
 
-impl crate::peripheral::Peripheral for &mut ADC1 {
-    type P = ADC1;
-    #[inline]
-    unsafe fn clone_unchecked(&mut self) -> Self::P {
-        ADC1 { _private: () }
-    }
-}
-
-impl core::ops::Deref for ADC2 {
-    type Target = ADC2;
-
-    fn deref(&self) -> &Self::Target {
-        self
-    }
-}
-
-impl core::ops::DerefMut for ADC2 {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self
-    }
-}
+impl crate::peripheral::sealed::Sealed for ADC1 {}
 
 impl crate::peripheral::Peripheral for ADC2 {
     type P = ADC2;
@@ -74,27 +53,7 @@ impl crate::peripheral::Peripheral for ADC2 {
     }
 }
 
-impl crate::peripheral::Peripheral for &mut ADC2 {
-    type P = ADC2;
-    #[inline]
-    unsafe fn clone_unchecked(&mut self) -> Self::P {
-        ADC2 { _private: () }
-    }
-}
-
-impl core::ops::Deref for DAC1 {
-    type Target = DAC1;
-
-    fn deref(&self) -> &Self::Target {
-        self
-    }
-}
-
-impl core::ops::DerefMut for DAC1 {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self
-    }
-}
+impl crate::peripheral::sealed::Sealed for ADC2 {}
 
 impl crate::peripheral::Peripheral for DAC1 {
     type P = DAC1;
@@ -104,47 +63,21 @@ impl crate::peripheral::Peripheral for DAC1 {
     }
 }
 
-impl crate::peripheral::Peripheral for &mut DAC1 {
-    type P = DAC1;
-    #[inline]
-    unsafe fn clone_unchecked(&mut self) -> Self::P {
-        DAC1 { _private: () }
-    }
-}
-
-impl core::ops::Deref for DAC2 {
-    type Target = DAC2;
-
-    fn deref(&self) -> &Self::Target {
-        self
-    }
-}
-
-impl core::ops::DerefMut for DAC2 {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self
-    }
-}
+impl crate::peripheral::sealed::Sealed for DAC1 {}
 
 impl crate::peripheral::Peripheral for DAC2 {
     type P = DAC2;
+
     #[inline]
     unsafe fn clone_unchecked(&mut self) -> Self::P {
         DAC2 { _private: () }
     }
 }
 
-impl crate::peripheral::Peripheral for &mut DAC2 {
-    type P = DAC2;
-    #[inline]
-    unsafe fn clone_unchecked(&mut self) -> Self::P {
-        DAC2 { _private: () }
-    }
-}
+impl crate::peripheral::sealed::Sealed for DAC2 {}
 
 cfg_if::cfg_if! {
     if #[cfg(any(esp32, esp32s2, esp32s3))] {
-
         use crate::peripherals::SENS;
 
         pub struct AvailableAnalog {
@@ -181,12 +114,12 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
-    if #[cfg(esp32c3)] {
-
+    if #[cfg(any(esp32c2, esp32c3, esp32c6))] {
         use crate::peripherals::APB_SARADC;
 
         pub struct AvailableAnalog {
             pub adc1: ADC1,
+            #[cfg(esp32c3)]
             pub adc2: ADC2,
         }
 
@@ -201,33 +134,8 @@ cfg_if::cfg_if! {
                     adc1: ADC1 {
                         _private: (),
                     },
+                    #[cfg(esp32c3)]
                     adc2: ADC2 {
-                        _private: (),
-                    },
-                }
-            }
-        }
-    }
-}
-
-cfg_if::cfg_if! {
-    if #[cfg(esp32c2)] {
-
-        use crate::peripherals::APB_SARADC;
-
-        pub struct AvailableAnalog {
-            pub adc1: ADC1,
-        }
-
-        /// Extension trait to split a APB_SARADC peripheral in independent parts
-        pub trait SarAdcExt {
-            fn split(self) -> AvailableAnalog;
-        }
-
-        impl<'d, T: crate::peripheral::Peripheral<P = APB_SARADC> + 'd> SarAdcExt for T {
-            fn split(self) -> AvailableAnalog {
-                AvailableAnalog {
-                    adc1: ADC1 {
                         _private: (),
                     },
                 }

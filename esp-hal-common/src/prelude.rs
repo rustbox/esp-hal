@@ -20,7 +20,7 @@ pub use fugit::{
 };
 pub use nb;
 
-#[cfg(any(esp32c2, esp32c3))]
+#[cfg(any(esp32c2, esp32c3, esp32c6))]
 pub use crate::analog::SarAdcExt as _esp_hal_analog_SarAdcExt;
 #[cfg(any(esp32, esp32s2, esp32s3))]
 pub use crate::analog::SensExt as _esp_hal_analog_SensExt;
@@ -29,6 +29,8 @@ pub use crate::pulse_control::{
     ConfiguredChannel as _esp_hal_pulse_control_ConfiguredChannel,
     OutputChannel as _esp_hal_pulse_control_OutputChannel,
 };
+#[cfg(radio)]
+pub use crate::radio::RadioExt as _esp_hal_RadioExt;
 #[cfg(any(esp32, esp32s2))]
 pub use crate::spi::dma::WithDmaSpi3 as _esp_hal_spi_dma_WithDmaSpi3;
 pub use crate::{

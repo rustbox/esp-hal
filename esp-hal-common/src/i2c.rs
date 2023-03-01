@@ -6,11 +6,10 @@ use fugit::HertzU32;
 
 use crate::{
     clock::Clocks,
-    gpio::{InputPin, OutputPin},
+    gpio::{InputPin, InputSignal, OutputPin, OutputSignal},
     peripheral::{Peripheral, PeripheralRef},
     peripherals::i2c0::{RegisterBlock, COMD},
     system::PeripheralClockControl,
-    types::{InputSignal, OutputSignal},
 };
 
 cfg_if::cfg_if! {
@@ -136,7 +135,7 @@ enum Ack {
     Nack,
 }
 
-#[cfg(any(esp32c2, esp32c3, esp32s3))]
+#[cfg(any(esp32c2, esp32c3, esp32c6, esp32s3))]
 enum Opcode {
     RStart = 6,
     Write  = 1,
@@ -352,7 +351,7 @@ pub trait Instance {
         self.set_frequency(clocks.i2c_clock.convert(), frequency);
 
         // Propagate configuration changes (only necessary with C2, C3, and S3)
-        #[cfg(any(esp32c2, esp32c3, esp32s3))]
+        #[cfg(any(esp32c2, esp32c3, esp32c6, esp32s3))]
         self.register_block()
             .ctr
             .modify(|_, w| w.conf_upgate().set_bit());
@@ -553,7 +552,7 @@ pub trait Instance {
         );
     }
 
-    #[cfg(any(esp32c2, esp32c3, esp32s3))]
+    #[cfg(any(esp32c2, esp32c3, esp32c6, esp32s3))]
     /// Sets the frequency of the I2C interface by calculating and applying the
     /// associated timings - corresponds to i2c_ll_cal_bus_clk and
     /// i2c_ll_set_bus_timing in ESP-IDF
@@ -641,7 +640,7 @@ pub trait Instance {
     ) {
         unsafe {
             // divider
-            #[cfg(any(esp32c2, esp32c3, esp32s3))]
+            #[cfg(any(esp32c2, esp32c3, esp32c6, esp32s3))]
             self.register_block().clk_conf.modify(|_, w| {
                 w.sclk_sel()
                     .clear_bit()
@@ -962,7 +961,7 @@ pub trait Instance {
     fn update_config(&self) {
         // Ensure that the configuration of the peripheral is correctly propagated
         // (only necessary for C3 and S3 variant)
-        #[cfg(any(esp32c2, esp32c3, esp32s3))]
+        #[cfg(any(esp32c2, esp32c3, esp32c6, esp32s3))]
         self.register_block()
             .ctr
             .modify(|_, w| w.conf_upgate().set_bit());

@@ -8,16 +8,15 @@ use crate::dma::I2s1Peripheral;
 use crate::{
     clock::Clocks,
     dma::{Channel, DmaError, DmaTransfer, I2s0Peripheral, I2sPeripheral, Rx, Tx},
+    gpio::{InputPin, OutputPin},
     peripheral::{Peripheral, PeripheralRef},
     system::PeripheralClockControl,
-    InputPin,
-    OutputPin,
 };
 
 #[cfg(any(esp32, esp32s2, esp32s3))]
 const I2S_LL_MCLK_DIVIDER_BIT_WIDTH: usize = 6;
 
-#[cfg(any(esp32c3))]
+#[cfg(any(esp32c3, esp32c6))]
 const I2S_LL_MCLK_DIVIDER_BIT_WIDTH: usize = 9;
 
 const I2S_LL_MCLK_DIVIDER_MAX: usize = (1 << I2S_LL_MCLK_DIVIDER_BIT_WIDTH) - 1;
@@ -990,19 +989,21 @@ mod private {
     use super::{DataFormat, I2sRx, I2sTx, RegisterAccess, Standard, I2S_LL_MCLK_DIVIDER_MAX};
     #[cfg(any(esp32c3, esp32s2))]
     use crate::peripherals::i2s::RegisterBlock;
+    #[cfg(esp32c6)]
+    use crate::peripherals::i2s0::RegisterBlock;
     // on ESP32-S3 I2S1 doesn't support all features - use that to avoid using those features
     // by accident
     #[cfg(any(esp32s3, esp32))]
     use crate::peripherals::i2s1::RegisterBlock;
     #[cfg(any(esp32c3, esp32s2))]
     use crate::peripherals::I2S;
-    #[cfg(any(esp32s3, esp32))]
+    #[cfg(any(esp32s3, esp32, esp32c6))]
     use crate::peripherals::I2S0 as I2S;
     use crate::{
         clock::Clocks,
         dma::{DmaPeripheral, Rx, Tx},
+        gpio::{InputSignal, OutputSignal},
         system::Peripheral,
-        types::{InputSignal, OutputSignal},
     };
 
     pub trait I2sPins {}
@@ -1289,8 +1290,9 @@ mod private {
         }
     }
 
-    #[cfg(any(esp32c3, esp32s3))]
+    #[cfg(any(esp32c3, esp32c6, esp32s3))]
     pub trait RegisterAccessPrivate: Signals + RegBlock {
+        #[cfg(any(esp32c3, esp32s3))]
         fn set_clock(&self, clock_settings: I2sClockDividers) {
             let i2s = self.register_block();
 
@@ -1381,6 +1383,105 @@ mod private {
                     .rx_clkm_div_num()
                     .variant(clock_settings.mclk_divider as u8)
                     .mclk_sel()
+                    .variant(true)
+            });
+
+            i2s.rx_conf1.modify(|_, w| {
+                w.rx_bck_div_num()
+                    .variant((clock_settings.bclk_divider - 1) as u8)
+            });
+        }
+
+        #[cfg(any(esp32c6))]
+        fn set_clock(&self, clock_settings: I2sClockDividers) {
+            let i2s = self.register_block();
+            let pcr = unsafe { &*esp32c6::PCR::PTR }; // I2S clocks are configured via PCR
+
+            let clkm_div_x: u32;
+            let clkm_div_y: u32;
+            let clkm_div_z: u32;
+            let clkm_div_yn1: u32;
+
+            if clock_settings.denominator == 0 || clock_settings.numerator == 0 {
+                clkm_div_x = 0;
+                clkm_div_y = 0;
+                clkm_div_z = 0;
+                clkm_div_yn1 = 1;
+            } else {
+                if clock_settings.numerator > clock_settings.denominator / 2 {
+                    clkm_div_x = clock_settings
+                        .denominator
+                        .overflowing_div(
+                            clock_settings
+                                .denominator
+                                .overflowing_sub(clock_settings.numerator)
+                                .0,
+                        )
+                        .0
+                        .overflowing_sub(1)
+                        .0;
+                    clkm_div_y = clock_settings.denominator
+                        % (clock_settings
+                            .denominator
+                            .overflowing_sub(clock_settings.numerator)
+                            .0);
+                    clkm_div_z = clock_settings
+                        .denominator
+                        .overflowing_sub(clock_settings.numerator)
+                        .0;
+                    clkm_div_yn1 = 1;
+                } else {
+                    clkm_div_x = clock_settings.denominator / clock_settings.numerator - 1;
+                    clkm_div_y = clock_settings.denominator % clock_settings.numerator;
+                    clkm_div_z = clock_settings.numerator;
+                    clkm_div_yn1 = 0;
+                }
+            }
+
+            pcr.i2s_tx_clkm_div_conf.modify(|_, w| {
+                w.i2s_tx_clkm_div_x()
+                    .variant(clkm_div_x as u16)
+                    .i2s_tx_clkm_div_y()
+                    .variant(clkm_div_y as u16)
+                    .i2s_tx_clkm_div_yn1()
+                    .variant(if clkm_div_yn1 != 0 { true } else { false })
+                    .i2s_tx_clkm_div_z()
+                    .variant(clkm_div_z as u16)
+            });
+
+            pcr.i2s_tx_clkm_conf.modify(|_, w| {
+                w.i2s_tx_clkm_en()
+                    .set_bit()
+                    .i2s_tx_clkm_sel()
+                    .variant(2) // for now fixed at 160MHz
+                    .i2s_tx_clkm_div_num()
+                    .variant(clock_settings.mclk_divider as u8)
+            });
+
+            i2s.tx_conf1.modify(|_, w| {
+                w.tx_bck_div_num()
+                    .variant((clock_settings.bclk_divider - 1) as u8)
+            });
+
+            pcr.i2s_rx_clkm_div_conf.modify(|_, w| {
+                w.i2s_rx_clkm_div_x()
+                    .variant(clkm_div_x as u16)
+                    .i2s_rx_clkm_div_y()
+                    .variant(clkm_div_y as u16)
+                    .i2s_rx_clkm_div_yn1()
+                    .variant(if clkm_div_yn1 != 0 { true } else { false })
+                    .i2s_rx_clkm_div_z()
+                    .variant(clkm_div_z as u16)
+            });
+
+            pcr.i2s_rx_clkm_conf.modify(|_, w| {
+                w.i2s_rx_clkm_en()
+                    .set_bit()
+                    .i2s_rx_clkm_sel()
+                    .variant(2) // for now fixed at 160MHz
+                    .i2s_rx_clkm_div_num()
+                    .variant(clock_settings.mclk_divider as u8)
+                    .i2s_mclk_sel()
                     .variant(true)
             });
 
@@ -1609,7 +1710,7 @@ mod private {
     #[derive(Clone)]
     pub struct I2sPeripheral1 {}
 
-    #[cfg(esp32c3)]
+    #[cfg(any(esp32c3, esp32c6))]
     impl Signals for I2sPeripheral0 {
         fn get_peripheral(&self) -> Peripheral {
             Peripheral::I2s0
@@ -1632,7 +1733,7 @@ mod private {
         }
 
         fn dout_signal(&self) -> OutputSignal {
-            OutputSignal::I2SI_SD
+            OutputSignal::I2SO_SD
         }
 
         fn bclk_rx_signal(&self) -> OutputSignal {
