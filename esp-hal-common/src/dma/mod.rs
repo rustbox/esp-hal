@@ -102,30 +102,35 @@ trait DmaLinkedListDw0 {
 }
 
 impl DmaLinkedListDw0 for &mut u32 {
+    #[inline(always)]
     fn set_size(&mut self, len: u16) {
         let mask = 0b111111111111;
         let bit_s = 0;
         **self = (**self & !(mask << bit_s)) | (len as u32) << bit_s;
     }
 
+    #[inline(always)]
     fn get_size(&mut self) -> u16 {
         let mask = 0b111111111111;
         let bit_s = 0;
         ((**self & (mask << bit_s)) >> bit_s) as u16
     }
 
+    #[inline(always)]
     fn set_length(&mut self, len: u16) {
         let mask = 0b111111111111;
         let bit_s = 12;
         **self = (**self & !(mask << bit_s)) | (len as u32) << bit_s;
     }
 
+    #[inline(always)]
     fn get_length(&mut self) -> u16 {
         let mask = 0b111111111111;
         let bit_s = 12;
         ((**self & (mask << bit_s)) >> bit_s) as u16
     }
 
+    #[inline(always)]
     fn set_err_eof(&mut self, err_eof: bool) {
         let mask = 0b1;
         let bit_s = 28;
@@ -133,30 +138,35 @@ impl DmaLinkedListDw0 for &mut u32 {
     }
 
     #[cfg(not(esp32))]
+    #[inline(always)]
     fn get_err_eof(&mut self) -> bool {
         let mask = 0b1;
         let bit_s = 28;
         ((**self & (mask << bit_s)) >> bit_s) != 0
     }
 
+    #[inline(always)]
     fn set_suc_eof(&mut self, suc_eof: bool) {
         let mask = 0b1;
         let bit_s = 30;
         **self = (**self & !(mask << bit_s)) | (suc_eof as u32) << bit_s;
     }
 
+    #[inline(always)]
     fn get_suc_eof(&mut self) -> bool {
         let mask = 0b1;
         let bit_s = 30;
         ((**self & (mask << bit_s)) >> bit_s) != 0
     }
 
+    #[inline(always)]
     fn set_owner(&mut self, owner: Owner) {
         let mask = 0b1;
         let bit_s = 31;
         **self = (**self & !(mask << bit_s)) | (owner as u32) << bit_s;
     }
 
+    #[inline(always)]
     fn get_owner(&mut self) -> Owner {
         let mask = 0b1;
         let bit_s = 31;
@@ -233,6 +243,7 @@ where
         R::set_in_priority(priority);
     }
 
+    #[link_section = ".rwtext"] // #[ram] without #[inline(never)]
     fn prepare_transfer(
         &mut self,
         descriptors: &mut [u32],
@@ -293,6 +304,7 @@ where
         Ok(())
     }
 
+    #[inline(always)]
     fn is_done(&self) -> bool {
         R::is_in_done()
     }
@@ -336,6 +348,7 @@ where
         self.rx_impl.init(burst_mode, priority);
     }
 
+    #[link_section = ".rwtext"] // #[ram] without #[inline(never)]
     fn prepare_transfer(
         &mut self,
         circular: bool,
@@ -369,6 +382,7 @@ where
         Ok(())
     }
 
+    #[inline(always)]
     fn is_done(&self) -> bool {
         self.rx_impl.is_done()
     }
@@ -518,6 +532,7 @@ where
         R::set_out_priority(priority);
     }
 
+    #[link_section = ".rwtext"] // #[ram] without #[inline(never)]
     fn prepare_transfer(
         &mut self,
         descriptors: &mut [u32],
@@ -578,6 +593,7 @@ where
         Ok(())
     }
 
+    #[inline(always)]
     fn is_done(&self) -> bool {
         R::is_out_done()
     }
@@ -636,6 +652,7 @@ where
         R::init_channel();
     }
 
+    #[link_section = ".rwtext"] // #[ram] without #[inline(never)]
     fn prepare_transfer(
         &mut self,
         peri: DmaPeripheral,
@@ -668,6 +685,7 @@ where
         Ok(())
     }
 
+    #[inline(always)]
     fn is_done(&self) -> bool {
         self.tx_impl.is_done()
     }

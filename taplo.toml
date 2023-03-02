@@ -1,0 +1,20 @@
+[formatting]
+align_comments       = true
+align_entries        = true
+array_auto_collapse  = true
+array_auto_expand    = true
+array_trailing_comma = true
+column_width         = 170
+
+[[rule]]
+include = ["**/Cargo.toml"]
+keys    = ["dependencies", "*-dependencies"]
+
+[rule.formatting]
+reorder_keys = true
+
+[[rule]]
+include = ["**/taplo.toml"]
+
+[rule.formatting]
+reorder_keys = true

@@ -57,6 +57,8 @@ use crate::{
     peripheral::{Peripheral, PeripheralRef},
     peripherals::spi2::RegisterBlock,
     system::PeripheralClockControl,
+    // types::{InputSignal, OutputSignal},
+    // InputPin, OutputPin,
 };
 
 /// The size of the FIFO buffer for SPI
@@ -198,7 +200,14 @@ where
         Self::new_internal(spi, frequency, mode, peripheral_clock_control, clocks)
     }
 
-    pub fn new_quad_send_only<SCK: OutputPin, SIO0: OutputPin, SIO1: OutputPin, SIO2: OutputPin, SIO3: OutputPin, CS: OutputPin>(
+    pub fn new_quad_send_only<
+        SCK: OutputPin,
+        SIO0: OutputPin,
+        SIO1: OutputPin,
+        SIO2: OutputPin,
+        SIO3: OutputPin,
+        CS: OutputPin,
+    >(
         spi: impl Peripheral<P = T> + 'd,
         sck: impl Peripheral<P = SCK> + 'd,
         sio0: impl Peripheral<P = SIO0> + 'd,
@@ -230,10 +239,10 @@ where
             sio3.set_to_push_pull_output()
                 .connect_peripheral_to_output(OutputSignal::FSPIHD);
         }
-            
+
         cs.set_to_push_pull_output()
             .connect_peripheral_to_output(spi.cs_signal());
-           
+
         let internal = Self::new_internal(spi, frequency, mode, peripheral_clock_control, clocks);
         let reg_block = internal.spi.register_block();
         reg_block.user.modify(|_, w| {
@@ -244,8 +253,9 @@ where
                 .fwrite_quad()
                 .set_bit()
         });
+        #[cfg(esp32c3)]
         reg_block.ctrl.write(|w| w.wr_bit_order().set_bit());
-        
+
         internal
     }
 
@@ -403,6 +413,7 @@ pub mod dma {
     {
         /// Wait for the DMA transfer to complete and return the buffers and the
         /// SPI instance.
+        #[inline(always)]
         fn wait(mut self) -> (RXBUF, TXBUF, SpiDma<'d, T, TX, RX, P>) {
             self.spi_dma.spi.flush().ok(); // waiting for the DMA transfer is not enough
 
@@ -563,6 +574,7 @@ pub mod dma {
         /// This will return a [SpiDmaTransfer] owning the buffer(s) and the SPI
         /// instance. The maximum amount of data to be sent/received is
         /// 32736 bytes.
+        #[link_section = ".rwtext"] // #[ram] without #[inline(never)]
         pub fn dma_transfer<TXBUF, RXBUF>(
             mut self,
             words: TXBUF,
@@ -1161,6 +1173,7 @@ where
         return Ok(read_buffer);
     }
 
+    #[link_section = ".rwtext"] // #[ram] without #[inline(never)]
     fn start_transfer_dma<'w>(
         &mut self,
         write_buffer_ptr: *const u8,
@@ -1262,6 +1275,7 @@ where
         return Ok(());
     }
 
+    #[inline(always)]
     fn dma_peripheral(&self) -> DmaPeripheral {
         match self.spi_num() {
             2 => DmaPeripheral::Spi2,
@@ -1272,6 +1286,7 @@ where
     }
 
     #[cfg(any(esp32c2, esp32c3, esp32c6, esp32s3))]
+    #[inline(always)]
     fn enable_dma(&self) {
         let reg_block = self.register_block();
         reg_block.dma_conf.modify(|_, w| w.dma_tx_ena().set_bit());
@@ -1284,6 +1299,7 @@ where
     }
 
     #[cfg(any(esp32c2, esp32c3, esp32c6, esp32s3))]
+    #[inline(always)]
     fn clear_dma_interrupts(&self) {
         let reg_block = self.register_block();
         reg_block.dma_int_clr.write(|w| {
@@ -1384,10 +1400,8 @@ where
 {
 }
 
-///
 /// Generates the SPI Clock register value given the PRE and N
 /// input values
-///
 fn clock_register(pre: u32, n: u32) -> u32 {
     let l = n;
     let h = ((n + 1) / 2).saturating_sub(1);
@@ -1719,6 +1733,7 @@ pub trait Instance {
     }
 
     // Check if the bus is busy and if it is wait for it to be idle
+    #[inline(always)]
     fn flush(&mut self) -> Result<(), Error> {
         let reg_block = self.register_block();
 
@@ -1739,6 +1754,7 @@ pub trait Instance {
     }
 
     #[cfg(not(any(esp32, esp32s2)))]
+    #[inline(always)]
     fn update(&self) {
         let reg_block = self.register_block();
 
@@ -1754,6 +1770,7 @@ pub trait Instance {
         // not need/available on ESP32/ESP32S2
     }
 
+    #[inline(always)]
     fn configure_datalen(&self, len: u32) {
         let reg_block = self.register_block();
 
