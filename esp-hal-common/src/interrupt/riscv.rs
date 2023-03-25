@@ -582,16 +582,7 @@ pub unsafe extern "C" fn start_trap_rust_hal(trap_frame: *mut TrapFrame) {
         let code = mcause::read().code();
         match code {
             1 => interrupt1(trap_frame.as_mut().unwrap()),
-            // 2 => interrupt2(trap_frame.as_mut().unwrap()),
-            2 => {
-                clear(crate::get_core(), CpuInterrupt::Interrupt2);
-
-                let handler = peripherals::__EXTERNAL_INTERRUPTS
-                    [peripherals::Interrupt::UART0 as usize]
-                    ._handler;
-                let handler: fn(&mut TrapFrame) = core::mem::transmute(handler);
-                handler(trap_frame.as_mut().unwrap());
-            }
+            2 => interrupt2(trap_frame.as_mut().unwrap()),
             3 => interrupt3(trap_frame.as_mut().unwrap()),
             4 => interrupt4(trap_frame.as_mut().unwrap()),
             5 => interrupt5(trap_frame.as_mut().unwrap()),
@@ -604,16 +595,7 @@ pub unsafe extern "C" fn start_trap_rust_hal(trap_frame: *mut TrapFrame) {
             12 => interrupt12(trap_frame.as_mut().unwrap()),
             13 => interrupt13(trap_frame.as_mut().unwrap()),
             14 => interrupt14(trap_frame.as_mut().unwrap()),
-            // 15 => interrupt15(trap_frame.as_mut().unwrap()),
-            15 => {
-                clear(crate::get_core(), CpuInterrupt::Interrupt15);
-
-                let handler = peripherals::__EXTERNAL_INTERRUPTS
-                    [peripherals::Interrupt::GPIO as usize]
-                    ._handler;
-                let handler: fn(&mut TrapFrame) = core::mem::transmute(handler);
-                handler(trap_frame.as_mut().unwrap());
-            }
+            15 => interrupt15(trap_frame.as_mut().unwrap()),
             16 => interrupt16(trap_frame.as_mut().unwrap()),
             17 => interrupt17(trap_frame.as_mut().unwrap()),
             18 => interrupt18(trap_frame.as_mut().unwrap()),

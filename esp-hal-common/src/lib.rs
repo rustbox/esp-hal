@@ -123,6 +123,7 @@ pub fn disable_apm_filter() {
 
 /// Enumeration of CPU cores
 /// The actual number of available cores depends on the target.
+// #[repr(u8)]
 pub enum Cpu {
     /// The first core
     ProCpu = 0,
@@ -130,6 +131,7 @@ pub enum Cpu {
     AppCpu,
 }
 
+// #[inline(always)]
 pub fn get_core() -> Cpu {
     #[cfg(all(xtensa, multi_core))]
     match ((xtensa_lx::get_processor_id() >> 13) & 1) != 0 {
