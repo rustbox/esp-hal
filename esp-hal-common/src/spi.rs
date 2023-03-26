@@ -573,7 +573,6 @@ pub mod dma {
         /// This will return a [SpiDmaTransfer] owning the buffer(s) and the SPI
         /// instance. The maximum amount of data to be sent/received is
         /// 32736 bytes.
-        #[link_section = ".rwtext"] // #[ram] without #[inline(never)]
         pub fn dma_transfer<TXBUF, RXBUF>(
             mut self,
             words: TXBUF,
@@ -1172,7 +1171,6 @@ where
         return Ok(read_buffer);
     }
 
-    #[link_section = ".rwtext"] // #[ram] without #[inline(never)]
     fn start_transfer_dma<'w>(
         &mut self,
         write_buffer_ptr: *const u8,

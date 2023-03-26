@@ -243,7 +243,6 @@ where
         R::set_in_priority(priority);
     }
 
-    #[link_section = ".rwtext"] // #[ram] without #[inline(never)]
     fn prepare_transfer(
         &mut self,
         descriptors: &mut [u32],
@@ -348,7 +347,6 @@ where
         self.rx_impl.init(burst_mode, priority);
     }
 
-    #[link_section = ".rwtext"] // #[ram] without #[inline(never)]
     fn prepare_transfer(
         &mut self,
         circular: bool,
@@ -532,7 +530,6 @@ where
         R::set_out_priority(priority);
     }
 
-    #[link_section = ".rwtext"] // #[ram] without #[inline(never)]
     fn prepare_transfer(
         &mut self,
         descriptors: &mut [u32],
@@ -652,7 +649,6 @@ where
         R::init_channel();
     }
 
-    #[link_section = ".rwtext"] // #[ram] without #[inline(never)]
     fn prepare_transfer(
         &mut self,
         peri: DmaPeripheral,
