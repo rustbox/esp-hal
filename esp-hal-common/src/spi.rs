@@ -412,6 +412,7 @@ pub mod dma {
     {
         /// Wait for the DMA transfer to complete and return the buffers and the
         /// SPI instance.
+        #[inline(always)]
         fn wait(mut self) -> (RXBUF, TXBUF, SpiDma<'d, T, TX, RX, P>) {
             self.spi_dma.spi.flush().ok(); // waiting for the DMA transfer is not enough
 
@@ -572,6 +573,7 @@ pub mod dma {
         /// This will return a [SpiDmaTransfer] owning the buffer(s) and the SPI
         /// instance. The maximum amount of data to be sent/received is
         /// 32736 bytes.
+        #[link_section = ".rwtext"] // #[ram] without #[inline(never)]
         pub fn dma_transfer<TXBUF, RXBUF>(
             mut self,
             words: TXBUF,
@@ -1170,6 +1172,7 @@ where
         return Ok(read_buffer);
     }
 
+    #[link_section = ".rwtext"] // #[ram] without #[inline(never)]
     fn start_transfer_dma<'w>(
         &mut self,
         write_buffer_ptr: *const u8,
@@ -1271,6 +1274,7 @@ where
         return Ok(());
     }
 
+    #[inline(always)]
     fn dma_peripheral(&self) -> DmaPeripheral {
         match self.spi_num() {
             2 => DmaPeripheral::Spi2,
@@ -1281,6 +1285,7 @@ where
     }
 
     #[cfg(any(esp32c2, esp32c3, esp32c6, esp32s3))]
+    #[inline(always)]
     fn enable_dma(&self) {
         let reg_block = self.register_block();
         reg_block.dma_conf.modify(|_, w| w.dma_tx_ena().set_bit());
@@ -1293,6 +1298,7 @@ where
     }
 
     #[cfg(any(esp32c2, esp32c3, esp32c6, esp32s3))]
+    #[inline(always)]
     fn clear_dma_interrupts(&self) {
         let reg_block = self.register_block();
         reg_block.dma_int_clr.write(|w| {
@@ -1726,6 +1732,7 @@ pub trait Instance {
     }
 
     // Check if the bus is busy and if it is wait for it to be idle
+    #[inline(always)]
     fn flush(&mut self) -> Result<(), Error> {
         let reg_block = self.register_block();
 
@@ -1746,6 +1753,7 @@ pub trait Instance {
     }
 
     #[cfg(not(any(esp32, esp32s2)))]
+    #[inline(always)]
     fn update(&self) {
         let reg_block = self.register_block();
 
@@ -1761,6 +1769,7 @@ pub trait Instance {
         // not need/available on ESP32/ESP32S2
     }
 
+    #[inline(always)]
     fn configure_datalen(&self, len: u32) {
         let reg_block = self.register_block();
 

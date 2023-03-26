@@ -16,6 +16,7 @@ macro_rules! impl_channel {
                     // nothing special to be done here
                 }
 
+                #[inline(always)]
                 fn set_out_burstmode(burst_mode: bool) {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
@@ -25,6 +26,7 @@ macro_rules! impl_channel {
                     });
                 }
 
+                #[inline(always)]
                 fn set_out_priority(priority: DmaPriority) {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
@@ -33,6 +35,7 @@ macro_rules! impl_channel {
                     });
                 }
 
+                #[inline(always)]
                 fn clear_out_interrupts() {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
@@ -89,6 +92,7 @@ macro_rules! impl_channel {
                     });
                 }
 
+                #[inline(always)]
                 fn reset_out() {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
@@ -96,12 +100,14 @@ macro_rules! impl_channel {
                     dma.[<out_conf0_ch $num>].modify(|_, w| w.out_rst().clear_bit());
                 }
 
+                #[inline(always)]
                 fn set_out_descriptors(address: u32) {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
                     dma.[<out_link_ch $num>].modify(|_, w| unsafe { w.outlink_addr().bits(address) });
                 }
 
+                #[inline(always)]
                 fn has_out_descriptor_error() -> bool {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
@@ -113,18 +119,21 @@ macro_rules! impl_channel {
                     ret
                 }
 
+                #[inline(always)]
                 fn set_out_peripheral(peripheral: u8) {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
                     dma.[<out_peri_sel_ch $num>].modify(|_, w| w.peri_out_sel().variant(peripheral));
                 }
 
+                #[inline(always)]
                 fn start_out() {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
                     dma.[<out_link_ch $num>].modify(|_, w| w.outlink_start().set_bit());
                 }
 
+                #[inline(always)]
                 fn is_out_done() -> bool {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
@@ -136,11 +145,13 @@ macro_rules! impl_channel {
                     ret
                 }
 
+                #[inline(always)]
                 fn last_out_dscr_address() -> usize {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
                     dma.[<out_eof_des_addr_ch $num>].read().out_eof_des_addr().bits() as usize
                 }
 
+                #[inline(always)]
                 fn is_out_eof_interrupt_set() -> bool {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
@@ -152,6 +163,7 @@ macro_rules! impl_channel {
                     ret
                 }
 
+                #[inline(always)]
                 fn reset_out_eof_interrupt() {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
@@ -168,6 +180,7 @@ macro_rules! impl_channel {
                     });
                 }
 
+                #[inline(always)]
                 fn set_in_burstmode(burst_mode: bool) {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
@@ -176,6 +189,7 @@ macro_rules! impl_channel {
                     });
                 }
 
+                #[inline(always)]
                 fn set_in_priority(priority: DmaPriority) {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
@@ -184,6 +198,7 @@ macro_rules! impl_channel {
                     });
                 }
 
+                #[inline(always)]
                 fn clear_in_interrupts() {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
@@ -246,6 +261,7 @@ macro_rules! impl_channel {
                     });
                 }
 
+                #[inline(always)]
                 fn reset_in() {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
@@ -253,12 +269,14 @@ macro_rules! impl_channel {
                     dma.[<in_conf0_ch $num>].modify(|_, w| w.in_rst().clear_bit());
                 }
 
+                #[inline(always)]
                 fn set_in_descriptors(address: u32) {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
                     dma.[<in_link_ch $num>].modify(|_, w| unsafe { w.inlink_addr().bits(address) });
                 }
 
+                #[inline(always)]
                 fn has_in_descriptor_error() -> bool {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
@@ -270,18 +288,21 @@ macro_rules! impl_channel {
                     ret
                 }
 
+                #[inline(always)]
                 fn set_in_peripheral(peripheral: u8) {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
                     dma.[<in_peri_sel_ch $num>].modify(|_, w| w.peri_in_sel().variant(peripheral));
                 }
 
+                #[inline(always)]
                 fn start_in() {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
                     dma.[<in_link_ch $num>].modify(|_, w| w.inlink_start().set_bit());
                 }
 
+                #[inline(always)]
                 fn is_in_done() -> bool {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
 
@@ -293,11 +314,13 @@ macro_rules! impl_channel {
                     ret
                 }
 
+                #[inline(always)]
                 fn last_in_dscr_address() -> usize {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
                     dma.[<in_dscr_bf0_ch $num>].read().inlink_dscr_bf0().bits() as usize
                 }
 
+                #[inline(always)]
                 fn is_listening_in_eof() -> bool {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
                     cfg_if::cfg_if! {
@@ -309,6 +332,7 @@ macro_rules! impl_channel {
                     }
                 }
 
+                #[inline(always)]
                 fn is_listening_out_eof() -> bool {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
                     cfg_if::cfg_if! {
@@ -320,6 +344,7 @@ macro_rules! impl_channel {
                     }
                 }
 
+                #[inline(always)]
                 fn listen_in_eof() {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
                     cfg_if::cfg_if! {
@@ -331,6 +356,7 @@ macro_rules! impl_channel {
                     }
                 }
 
+                #[inline(always)]
                 fn listen_out_eof() {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
                     cfg_if::cfg_if! {
@@ -342,6 +368,7 @@ macro_rules! impl_channel {
                     }
                 }
 
+                #[inline(always)]
                 fn unlisten_in_eof() {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
                     cfg_if::cfg_if! {
@@ -353,6 +380,7 @@ macro_rules! impl_channel {
                     }
                 }
 
+                #[inline(always)]
                 fn unlisten_out_eof() {
                     let dma = unsafe { &*crate::peripherals::DMA::PTR };
                     cfg_if::cfg_if! {
