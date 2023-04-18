@@ -467,6 +467,7 @@ pub mod dma {
     {
         /// Wait for the DMA transfer to complete and return the buffers and the
         /// SPI instance.
+        #[inline(always)]
         fn wait(mut self) -> (BUFFER, SpiDma<'d, T, TX, RX, P>) {
             self.spi_dma.spi.flush().ok(); // waiting for the DMA transfer is not enough
 
@@ -521,6 +522,7 @@ pub mod dma {
         /// This will return a [SpiDmaTransfer] owning the buffer(s) and the SPI
         /// instance. The maximum amount of data to be sent is 32736
         /// bytes.
+        #[link_section = ".rwtext"]
         pub fn dma_write<TXBUF>(
             mut self,
             words: TXBUF,
@@ -1224,6 +1226,7 @@ where
         return Ok(words);
     }
 
+    #[inline(always)]
     fn start_write_bytes_dma<'w>(
         &mut self,
         ptr: *const u8,
@@ -1342,6 +1345,7 @@ where
 }
 
 #[cfg(not(any(esp32, esp32s2)))]
+#[inline(always)]
 fn reset_dma_before_usr_cmd(reg_block: &RegisterBlock) {
     reg_block.dma_conf.modify(|_, w| {
         w.rx_afifo_rst()
@@ -1357,6 +1361,7 @@ fn reset_dma_before_usr_cmd(reg_block: &RegisterBlock) {
 fn reset_dma_before_usr_cmd(_reg_block: &RegisterBlock) {}
 
 #[cfg(not(any(esp32, esp32s2)))]
+#[inline(always)]
 fn reset_dma_before_load_dma_dscr(_reg_block: &RegisterBlock) {}
 
 #[cfg(any(esp32, esp32s2))]
