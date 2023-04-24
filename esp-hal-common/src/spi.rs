@@ -1904,6 +1904,9 @@ where
         reset_dma_before_load_dma_dscr(reg_block);
         tx.prepare_transfer(self.dma_peripheral(), false, ptr, len)?;
 
+        // critical load-bearing nop, see https://github.com/esp-rs/esp-hal/issues/489
+        unsafe { core::arch::asm!("nop") }
+
         self.clear_dma_interrupts();
         reset_dma_before_usr_cmd(reg_block);
 
