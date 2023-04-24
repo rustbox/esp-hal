@@ -502,6 +502,7 @@ where
 {
     type Time = MicrosDurationU64;
 
+    #[link_section = ".rwtext"] // not real-time critical, but avoids thrashing the cache 480 times a second.
     fn start<Time>(&mut self, timeout: Time)
     where
         Time: Into<Self::Time>,
