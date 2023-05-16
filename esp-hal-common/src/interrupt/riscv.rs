@@ -110,6 +110,7 @@ pub enum CpuInterrupt {
 
 /// Interrupt priority levels.
 #[repr(u8)]
+#[derive(Debug, Copy, Clone)]
 pub enum Priority {
     None = 0,
     Priority1,
@@ -151,18 +152,10 @@ mod vectored {
     // Setup interrupts ready for vectoring
     #[doc(hidden)]
     pub(crate) unsafe fn init_vectoring() {
-        for (prio, num) in PRIORITY_TO_INTERRUPT.iter().enumerate() {
-            set_kind(
-                crate::get_core(),
-                core::mem::transmute(*num as u32),
-                InterruptKind::Level,
-            );
-            set_priority(
-                crate::get_core(),
-                core::mem::transmute(*num as u32),
-                core::mem::transmute((prio as u8) + 1),
-            );
-            enable_cpu_interrupt(core::mem::transmute(*num as u32));
+        for Mapping { irq, prio } in Mapping::vectoring() {
+            set_kind(crate::get_core(), irq, InterruptKind::Level);
+            set_priority(crate::get_core(), irq, prio);
+            enable_cpu_interrupt(irq);
         }
     }
 
@@ -202,8 +195,7 @@ mod vectored {
             return Err(Error::InvalidInterruptPriority);
         }
         unsafe {
-            let cpu_interrupt =
-                core::mem::transmute(PRIORITY_TO_INTERRUPT[(level as usize) - 1] as u32);
+            let cpu_interrupt = Mapping::from_prio(level).irq;
             map(crate::get_core(), interrupt, cpu_interrupt);
             enable_cpu_interrupt(cpu_interrupt);
         }
@@ -220,7 +212,7 @@ mod vectored {
 
         let configured_interrupts = get_configured_interrupts(crate::get_core(), status);
         let mut interrupt_mask =
-            status & configured_interrupts[interrupt_to_priority(cpu_intr as usize)];
+            status & configured_interrupts[Mapping::from_irq(cpu_intr).prio as usize];
         while interrupt_mask != 0 {
             let interrupt_nr = interrupt_mask.trailing_zeros();
             // Interrupt::try_from can fail if interrupt already de-asserted:
@@ -601,21 +593,42 @@ unsafe fn get_assigned_cpu_interrupt(interrupt: Interrupt) -> CpuInterrupt {
     core::mem::transmute(cpu_intr)
 }
 
+struct Mapping {
+    irq: CpuInterrupt,
+    prio: Priority,
+}
+
 #[cfg(not(plic))]
 mod classic {
-    use super::{CpuInterrupt, InterruptKind, Priority};
+    use super::{CpuInterrupt, InterruptKind, Mapping, Priority};
     use crate::Cpu;
 
-    #[inline(always)]
-    pub(super) const fn interrupt_to_priority(irq: usize) -> usize {
-        irq
+    impl Mapping {
+        pub(super) fn vectoring() -> impl Iterator<Item = Self> {
+            (1..=15).map(|n| Mapping {
+                irq: unsafe { core::mem::transmute(n as u32) },
+                prio: unsafe { core::mem::transmute(n as u8) },
+            })
+        }
+
+        #[inline(always)] // hopefully we will prevent LLVM from emitting a lookup table into flash
+        pub(super) const unsafe fn from_irq(irq: CpuInterrupt) -> Self {
+            Mapping {
+                irq,
+                prio: core::mem::transmute(irq as u8),
+            }
+        }
+
+        /// # Safety
+        ///
+        /// Passing `Priority::None` is undefined
+        pub(super) const unsafe fn from_prio(prio: Priority) -> Self {
+            Mapping {
+                irq: core::mem::transmute(prio as u32),
+                prio,
+            }
+        }
     }
-
-    pub(super) const PRIORITY_TO_INTERRUPT: [usize; 15] =
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-
-    pub(super) const INTERRUPT_TO_PRIORITY: [usize; 15] =
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 
     /// Enable a CPU interrupt
     pub unsafe fn enable_cpu_interrupt(which: CpuInterrupt) {
@@ -725,18 +738,60 @@ mod classic {
 
 #[cfg(plic)]
 mod plic {
-    use super::{CpuInterrupt, InterruptKind, Priority};
+    use super::{CpuInterrupt, InterruptKind, Mapping, Priority};
     use crate::Cpu;
 
-    // don't use interrupts reserved for CLIC (0,3,4,7)
-    // for some reason also CPU interrupt 8 doesn't work by default since it's
-    // disabled after reset - so don't use that, too
-    pub(super) const PRIORITY_TO_INTERRUPT: [usize; 15] =
-        [1, 2, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+    /// don't use interrupts reserved for CLIC (0,3,4,7)
+    /// for some reason also CPU interrupt 8 doesn't work by default since it's
+    /// disabled after reset - so don't use that, too
+    impl Mapping {
+        pub(super) fn vectoring() -> impl Iterator<Item = Self> {
+            core::iter::Iterator::zip(
+                (1..=15_u8).map(|m| unsafe { core::mem::transmute::<_, Priority>(m) }),
+                (1..).filter_map(|n| match n {
+                    0 | 3 | 4 | 7 => None, // reserved for CLIC
+                    8 => None,             // disabled after reset
+                    n if n < 32 => Some(unsafe { core::mem::transmute::<_, CpuInterrupt>(n) }),
+                    _ => unreachable!("exhausted CPU interrupt slots trying to map priorities"),
+                }),
+            )
+            .map(|(prio, irq)| Mapping { prio, irq })
+        }
 
-    pub(super) const INTERRUPT_TO_PRIORITY: [usize; 19] = [
-        1, 2, 0, 0, 3, 4, 0, 0, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-    ];
+        #[inline(always)] // hopefully we will prevent LLVM from emitting a lookup table into flash
+        pub(super) const unsafe fn from_irq(irq: CpuInterrupt) -> Self {
+            let num = irq as u32;
+            let prio = match num {
+                1 | 2 => num,
+                5 | 6 => num - 2,                       // skip 3, 4
+                num if 9 <= num && num < 19 => num - 4, // skip 3, 4, 7, 8
+
+                _ => 0,
+            };
+
+            Mapping {
+                irq,
+                prio: core::mem::transmute(prio as u8),
+            }
+        }
+
+        /// # Safety
+        ///
+        /// The result of passing `Priority::None` is undefined
+        pub(super) const unsafe fn from_prio(prio: Priority) -> Self {
+            let num = prio as u8;
+            let irq = match num {
+                1 | 2 => num,
+                3 | 4 | 5 | 6 => num + 2, // skip irq 3, 4
+                _ => num + 4,             // skip irq 3, 4, 7, 8
+            };
+
+            Mapping {
+                irq: core::mem::transmute(irq as u32),
+                prio,
+            }
+        }
+    }
 
     const DR_REG_PLIC_MX_BASE: u32 = 0x20001000;
     const PLIC_MXINT_ENABLE_REG: u32 = DR_REG_PLIC_MX_BASE + 0x0;
