@@ -27,7 +27,7 @@ categories = [
 [dependencies]
 cfg-if             = "1.0.0"
 embassy-time       = { version = "0.1.1", features = ["nightly"], optional = true }
-embedded-hal       = { version = "1.0.0", features = ["unproven"] }
+embedded-hal       = { version = "1.0.0" }
 embedded-hal-1     = { version = "1.0.0", optional = true, package = "embedded-hal" }
 embedded-hal-async = { version = "0.2.0-alpha.1", optional = true }
 embedded-hal-nb    = { version = "1.0.0", optional = true }
